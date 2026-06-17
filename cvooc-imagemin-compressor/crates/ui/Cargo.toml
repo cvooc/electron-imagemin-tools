@@ -1,0 +1,10 @@
+[package]
+name = "ui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+core = { path = "../core" }
+iced = { version = "0.12", features = ["tokio", "image"] }
+rfd = "0.15"
+tokio = { version = "1", features = ["full"] }
