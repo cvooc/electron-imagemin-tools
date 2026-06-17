@@ -1,98 +1,62 @@
 'use strict';
 
-const version = "2.1";
-const domain = ''; //'http://localhost'; no need
-
-const electron = require('electron');
-
-var ipc = electron.ipcRenderer;
+const version = '3.0';
 
 function getFileSize(bytes) {
-  var exp = Math.floor(Math.log(bytes) / Math.log(1024)) | 0;
-  var result = (bytes / Math.pow(1024, exp)).toFixed(2);
-
-  return result + ' ' + (exp == 0 ? 'bytes' : 'KMGTPEZY' [exp - 1] + 'B');
+  const exp = Math.floor(Math.log(bytes) / Math.log(1024)) | 0;
+  const result = (bytes / Math.pow(1024, exp)).toFixed(2);
+  return result + ' ' + (exp === 0 ? 'bytes' : 'KMGTPEZY'[exp - 1] + 'B');
 }
 
-
 function basename(path) {
-  var name = path.split(/[\\/]/).pop();
+  const name = path.split(/[\\/]/).pop();
   return name.substring(0, name.lastIndexOf('.'));
 }
 
-function extname(path) {
-  return path.split('.').pop();
-}
-
 function toast(message, timeout = 3000) {
-  var options = {
-    timeout: timeout,
-    position: 'bottom'
-  };
-  mdui.snackbar(message, options)
+  mdui.snackbar(message, { timeout, position: 'bottom' });
 }
 
 function drop_handler(ev) {
   ev.preventDefault();
-  // If dropped items aren't files, reject them
-  var dt = ev.dataTransfer;
-  var files = new Array();
+  const dt = ev.dataTransfer;
+  const files = [];
   if (dt.items) {
-    // Use DataTransferItemList interface to access the file(s)
-    for (var i = 0; i < dt.items.length; i++) {
-      if (dt.items[i].kind == "file") {
-        var f = dt.items[i].getAsFile();
-        // console.log("... file[" + i + "].name = " + f.name);
-        files.push(f);
+    for (let i = 0; i < dt.items.length; i++) {
+      if (dt.items[i].kind === 'file') {
+        files.push(dt.items[i].getAsFile());
       }
     }
   } else {
-    // Use DataTransfer interface to access the file(s)
-    // for (var i=0; i < dt.files.length; i++) {
-    //   console.log("... file[" + i + "].name = " + dt.files[i].name);
-    // }
     files = dt.files;
   }
-  console.log(files);
-
-  // requestToken(dt.files);
-  compFile(files, null);
+  compFile(files);
 }
 
 function dragover_handler(ev) {
-  // console.log("dragOver");
-  // Prevent default select and drag behavior
   ev.preventDefault();
-
 }
 
 function dragend_handler(ev) {
-  // console.log("dragEnd");
-  // Remove all of the drag data
-  var dt = ev.dataTransfer;
+  const dt = ev.dataTransfer;
   if (dt.items) {
-    // Use DataTransferItemList interface to remove the drag data
-    for (var i = 0; i < dt.items.length; i++) {
+    for (let i = 0; i < dt.items.length; i++) {
       dt.items.remove(i);
     }
   } else {
-    // Use DataTransfer interface to remove the drag data
     ev.dataTransfer.clearData();
   }
 }
 
-
 function validateFile(files) {
-  if (!files)
-    return false;
+  if (!files || files.length === 0) return false;
 
-  // 检查文件(基本名)是否相同
-  for (var i = 0; i < files.length; i++) {
-    var base1 = basename(files[i].name);
-    for (var j = i + 1; j < files.length; j++) {
-      var base2 = basename(files[j].name);
+  for (let i = 0; i < files.length; i++) {
+    const base1 = basename(files[i].name);
+    for (let j = i + 1; j < files.length; j++) {
+      const base2 = basename(files[j].name);
       if (base1 === base2) {
-        toast("文件基本名不能相同");
+        toast('文件基本名不能相同');
         return false;
       }
     }
@@ -101,111 +65,73 @@ function validateFile(files) {
   return true;
 }
 
-
-// https://stackoverflow.com/questions/24139216/js-input-file-to-json-with-for-example-json-stringify
 function getFilesInfo(files) {
-  var myArray = [];
-  var file = {};
-
-  console.log(files); // see the FileList
-
-  // manually create a new file obj for each File in the FileList
-  for (var i = 0; i < files.length; i++) {
-
-    file = {
-      'lastModified': files[i].lastModified,
-      'lastModifiedDate': files[i].lastModifiedDate,
-      'path': files[i].path,
-      'name': files[i].name,
-      'size': files[i].size,
-      'type': files[i].type,
-    }
-
-    //add the file obj to your array
-    myArray.push(file)
+  const result = [];
+  for (let i = 0; i < files.length; i++) {
+    result.push({
+      path: files[i].path,
+      name: files[i].name,
+      size: files[i].size,
+      type: files[i].type
+    });
   }
-
-  return myArray;
+  return result;
 }
 
-function startWorker(files) {
+async function compFile(files) {
+  if (!validateFile(files)) return;
 
-  var fileInfo = getFilesInfo(files);
+  $('#result').addClass('hide');
+  $('#progress').removeClass('hide');
 
-  // load quality setting
-  var jpgQ = parseInt(localStorage.getItem('jpg-quality')) || 80;
-  var pngQ = parseInt(localStorage.getItem('pngQ-quality')) || 80;
-  var webpQ = parseInt(localStorage.getItem('webpQ-quality')) || 80;
+  const fileInfo = getFilesInfo(files);
 
-  jpgQ = Math.max(1, Math.min(100, jpgQ));
-  pngQ = Math.max(21, Math.min(100, pngQ));
-  var pngQ_min = pngQ - 20;
+  const jpgQ = Math.max(1, Math.min(100, parseInt(localStorage.getItem('jpg-quality')) || 80));
+  const pngQ = Math.max(21, Math.min(100, parseInt(localStorage.getItem('pngQ-quality')) || 80));
+  const pngQ_min = pngQ - 20;
+  const webpQ = Math.max(1, Math.min(100, parseInt(localStorage.getItem('webpQ-quality')) || 80));
 
-  webpQ = Math.max(1, Math.min(100, webpQ));
-
-  var quality = {
-    'jpgq': jpgQ,
-    'pngq': pngQ,
-    'pngq_min': pngQ_min,
-    'webpq': webpQ,
+  const quality = {
+    jpgq: jpgQ,
+    pngq: pngQ,
+    pngq_min: pngQ_min,
+    webpq: webpQ
   };
 
-  ipc.send('req-comp-files', fileInfo, quality);
-}
+  try {
+    const { results, outputDir } = await window.electronAPI.compressFiles(fileInfo, quality);
 
-ipc.on('rsp-comp-files', (event, arg0, arg1) => {
-  console.log(arg0)
+    $('#filelist').empty();
+    for (const item of results) {
+      const percent = Math.floor((item.comp_size - item.size) * 100 / item.size) + '%';
+      const row = `<tr><td>${item.name}</td><td>${getFileSize(item.size)}</td><td>${getFileSize(item.comp_size)}</td><td>${percent}</td></tr>`;
+      $('#filelist').append(row);
+    }
 
-  var result = arg0;
-  $("#filelist").empty();
-  for (var i = 0; i < result.length; i++) {
+    if (results.length > 0) {
+      $('#explore').data('folder', outputDir);
+    } else {
+      $('#explore').data('folder', '');
+    }
 
-    var percent = Math.floor((result[i].comp_size - result[i].size) * 100 / result[i].size) + "%";
-    var item = "<tr><td>" + result[i].name + "</td><td>" + getFileSize(result[i].size) + "</td><td>" + getFileSize(
-      result[i].comp_size) + "</td><td>" + percent + "</td></tr>";
-    $("#filelist").append(item);
+    $('#summary').text(`共成功压缩 ${results.length} 个文件`);
+    $('#progress').addClass('hide');
+    $('#result').removeClass('hide');
+  } catch (error) {
+    console.error('压缩失败:', error);
+    toast('出错了，可能是系统资源不足');
+    $('#progress').addClass('hide');
   }
-
-  var folder = arg1;
-  if (result.length > 0)
-    $("#explore").data("folder", folder);
-  else
-    $("#explore").data("folder", "");
-
-  $("#summary").text("共成功压缩 " + result.length + " 个文件");
-
-  $("#progress").addClass("hide");
-  $("#result").removeClass("hide");
-
-});
-
-ipc.on('rsp-comp-files-error', (event, error) => {
-  toast("出错了，可能是系统资源不足");
-});
-
-function compFile(files, response) {
-  if (!response)
-    response = [];
-
-  if (false === validateFile(files)) {
-    return;
-  }
-
-  $("#result").addClass("hide");
-  $("#progress").removeClass("hide");
-
-  startWorker(files);
-  return;
 }
 
 function onQualityChange() {
-  var jpgQ = $('input[name=jpg]').val();
-  var pngQ = $('input[name=png]').val();
-  var webpQ = $('input[name=webp]').val();
+  const jpgQ = $('input[name=jpg]').val();
+  const pngQ = $('input[name=png]').val();
+  const webpQ = $('input[name=webp]').val();
 
-  $("#jpg-val").text(jpgQ);
-  $("#png-val").text(pngQ);
-  $("#webp-val").text(webpQ);
+  $('#jpg-val').text(jpgQ);
+  $('#png-val').text(pngQ);
+  $('#webp-val').text(webpQ);
 
   localStorage.setItem('jpg-quality', jpgQ);
   localStorage.setItem('pngQ-quality', pngQ);
@@ -213,90 +139,66 @@ function onQualityChange() {
 }
 
 function loadSetting() {
-  var jpgQ = parseInt(localStorage.getItem('jpg-quality')) || 80;
-  var pngQ = parseInt(localStorage.getItem('pngQ-quality')) || 80;
-  var webpQ = parseInt(localStorage.getItem('webpQ-quality')) || 80;
-
-  jpgQ = Math.max(1, Math.min(100, jpgQ));
-  pngQ = Math.max(1, Math.min(100, pngQ));
-  webpQ = Math.max(1, Math.min(100, webpQ));
-
-  // show setting
+  const jpgQ = Math.max(1, Math.min(100, parseInt(localStorage.getItem('jpg-quality')) || 80));
+  const pngQ = Math.max(1, Math.min(100, parseInt(localStorage.getItem('pngQ-quality')) || 80));
+  const webpQ = Math.max(1, Math.min(100, parseInt(localStorage.getItem('webpQ-quality')) || 80));
 
   $('input[name=jpg]').val(jpgQ);
   $('input[name=png]').val(pngQ);
   $('input[name=webp]').val(webpQ);
 
-  $("#jpg-val").text(jpgQ);
-  $("#png-val").text(pngQ);
-  $("#webp-val").text(webpQ);
+  $('#jpg-val').text(jpgQ);
+  $('#png-val').text(pngQ);
+  $('#webp-val').text(webpQ);
   mdui.updateSliders();
 }
 
-function init() {
-  // reqAppver();
-
-  // var token = localStorage.getItem('access-token');
-  // if(token === null) {
-  //     $("#login-modal").modal();
-  //     return;
-  // }
-}
-
-$(document).ready(function() {
-
-  $("#btn-close").click(function() {
-    ipc.send('close-main-window');
+$(document).ready(function () {
+  $('#btn-close').click(function () {
+    window.electronAPI.closeWindow();
   });
 
-  $("#btn-min").click(function() {
-    ipc.send('min-main-window');
+  $('#btn-min').click(function () {
+    window.electronAPI.minimizeWindow();
   });
 
-  $("#drop-upload-files").click(function() {
-    $("#input-upload-files").val(null);
-    $("#input-upload-files").click();
+  $('#drop-upload-files').click(function () {
+    $('#input-upload-files').val(null);
+    $('#input-upload-files').click();
     return false;
   });
 
-  $("#input-upload-files").change(function() {
-    var files = $('#input-upload-files')[0].files;
-    compFile(files, null);
+  $('#input-upload-files').change(function () {
+    const files = $('#input-upload-files')[0].files;
+    compFile(files);
     return false;
   });
 
-  $("#explore").click(function() {
-    var folder = $(this).data("folder");
-    if (folder !== "")
-      electron.shell.openPath(folder);
+  $('#explore').click(async function () {
+    const folder = $(this).data('folder');
+    if (folder !== '') {
+      await window.electronAPI.openPath(folder);
+    }
     return false;
   });
 
-  $("#setting").click(function() {
+  $('#setting').click(function () {
     loadSetting();
-    var tab = new mdui.Tab('#example4-tab');
-    document.getElementById('setting-modal1').addEventListener('open.mdui.dialog', function() {
+    const tab = new mdui.Tab('#example4-tab');
+    document.getElementById('setting-modal1').addEventListener('open.mdui.dialog', function () {
       tab.handleUpdate();
     });
-    var inst = new mdui.Dialog('#setting-modal1', {});
+    const inst = new mdui.Dialog('#setting-modal1', {});
     inst.open();
     return false;
   });
 
-  $('input[name=jpg]').on("input change", function() {
-    onQualityChange();
-  });
-  $('input[name=png]').on("input change", function() {
-    onQualityChange();
-  });
-  $('input[name=webp]').on("input change", function() {
-    onQualityChange();
-  });
+  $('input[name=jpg]').on('input change', onQualityChange);
+  $('input[name=png]').on('input change', onQualityChange);
+  $('input[name=webp]').on('input change', onQualityChange);
 
-  $(document).on('click', 'a[href^="http"]', function(event) {
+  $(document).on('click', 'a[href^="http"]', function (event) {
     event.preventDefault();
-    electron.shell.openExternal(this.href);
+    window.electronAPI.openPath(this.href);
   });
-
-  init();
 });
