@@ -56,6 +56,11 @@ ipcMain.handle('open-path', async (event, filePath) => {
   return shell.openPath(filePath);
 });
 
+// 打开 URL
+ipcMain.handle('open-url', async (event, url) => {
+  return shell.openExternal(url);
+});
+
 // 生成输出目录名
 function getOutputDir() {
   const now = new Date();

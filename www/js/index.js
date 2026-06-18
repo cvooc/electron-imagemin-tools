@@ -69,7 +69,7 @@ function getFilesInfo(files) {
   const result = [];
   for (let i = 0; i < files.length; i++) {
     result.push({
-      path: files[i].path,
+      path: window.electronAPI.getFilePath(files[i]),
       name: files[i].name,
       size: files[i].size,
       type: files[i].type
@@ -199,6 +199,6 @@ $(document).ready(function () {
 
   $(document).on('click', 'a[href^="http"]', function (event) {
     event.preventDefault();
-    window.electronAPI.openPath(this.href);
+    window.electronAPI.openUrl(this.href);
   });
 });

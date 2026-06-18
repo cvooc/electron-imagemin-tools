@@ -5,7 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-packager . retrocode压图工具 --win --out build --arch=x64 --overwrite --icon=./public/icon/icon.ico"
+    "build": "set \"ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/\" && electron-packager . retrocode压图工具 --win --out build --arch=x64 --overwrite --icon=./public/icon/icon.ico"
   },
   "repository": "https://github.com/electron/electron-quick-start",
   "author": "GitHub",
