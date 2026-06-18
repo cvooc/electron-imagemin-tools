@@ -1,0 +1,18 @@
+[package]
+name = "imagemin-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+image = "0.25"
+oxipng = "9"
+mozjpeg = "0.10"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+dirs = "5"
+chrono = "0.4"
+thiserror = "2"
+rayon = "1"
+imagequant = "4.4.1"
+png = "0.18.1"
+rgb = "0.8.53"

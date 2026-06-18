@@ -1,0 +1,29 @@
+[package]
+name = "ui"
+version.workspace = true
+edition.workspace = true
+description = "Image compression tool built with Rust and iced"
+license = "CC0-1.0"
+authors = ["retrocode"]
+build = "build.rs"
+
+[package.metadata.bundle]
+name = "cvooc-imagemin-compressor"
+identifier = "com.cvooc.imagemin-compressor"
+version = "1.0.0"
+copyright = "Copyright © 2026 cvooc"
+category = "Utility"
+short_description = "Image compression tool"
+long_description = "A fast image compression tool built with Rust and iced"
+icon = ["assets/icon.ico"]
+
+[build-dependencies]
+embed-resource = "2"
+
+[dependencies]
+imagemin-core = { path = "../core" }
+iced = { version = "0.12", features = ["tokio", "image", "system"] }
+rfd = "0.15"
+tokio = { version = "1", features = ["full"] }
+open = "5"
+chrono = "0.4"
