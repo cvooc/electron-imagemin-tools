@@ -4,21 +4,25 @@
 
 ## 功能
 
-- 支持 JPG/PNG/GIF/SVG 格式
-- 批量压缩（使用 rayon 并行处理）
-- 可调节压缩质量 (JPEG 0-100, PNG 21-100)
+- 支持 JPG/PNG/GIF/SVG/WebP 格式
+- 批量压缩（使用 rayon 并行处理核心，UI 显示逐文件进度）
+- 可调节压缩质量 (JPEG 0-100, PNG 0-100)
+- PNG 可选纯无损优化或有损量化（默认有损，对灰度/索引图自动保留原格式）
+- 三种输出目录模式：时间戳子目录、与输入文件同目录、自定义目录
+- 压缩失败在结果表格中显示原因
 - 拖放文件支持
 - 点击选择文件
 - 无边框窗口，可拖动
 - 中文界面
 - 压缩完成后打开输出目录
+- 结果页支持再次压缩与清空列表
 
 ## 体积对比
 
 | 版本 | 大小 |
 |------|------|
 | Electron 版本 | ~200 MB |
-| **Rust 版本** | **~26 MB** |
+| **Rust 版本** | **~8 MB** |
 
 ## 构建
 
@@ -58,24 +62,24 @@ cvooc-imagemin-compressor/
 │   │   ├── Cargo.toml
 │   │   ├── src/
 │   │   │   ├── lib.rs      # 模块导出
-│   │   │   ├── compress.rs # 压缩算法 (mozjpeg + imagequant + oxipng)
+│   │   │   ├── compress.rs # 压缩算法 (mozjpeg + imagequant + oxipng + gif + svg + webp)
 │   │   │   └── config.rs   # 配置管理
 │   │   └── tests/
-│   │       └── integration.rs  # 集成测试 (31 个)
+│   │       └── integration.rs  # 集成测试
 │   └── ui/                 # iced UI 界面
 │       ├── Cargo.toml
 │       ├── build.rs        # 构建脚本（嵌入图标）
 │       ├── icon.rc         # Windows 资源文件
 │       └── src/
-│           ├── main.rs     # 入口
-│           ├── app.rs      # 应用状态和消息处理
+│           ├── main.rs     # 入口（系统字体加载与 fallback）
+│           ├── app.rs      # 应用状态、消息流、异步压缩调度
 │           └── views/      # UI 组件
 │               ├── mod.rs
 │               ├── header.rs      # 标题栏
 │               ├── drop_zone.rs   # 拖放区域
-│               ├── progress.rs    # 进度显示
+│               ├── progress.rs    # 进度条
 │               ├── result_table.rs # 结果表格
-│               └── settings.rs    # 设置对话框
+│               └── settings.rs    # 设置页
 └── dist/
     └── cvooc-imagemin-compressor.exe  # 发布文件
 ```
@@ -86,102 +90,22 @@ cvooc-imagemin-compressor/
 |------|------|
 | UI 框架 | iced 0.12 |
 | JPEG 压缩 | mozjpeg（渐进式编码） |
-| PNG 压缩 | imagequant（有损） + oxipng（无损优化） |
+| PNG 压缩 | imagequant（有损索引色） + oxipng（无损优化） |
+| GIF 压缩 | imagequant 减少调色板（单帧）/ 保留动画 |
+| SVG 处理 | resvg + tiny-skia 光栅化为 PNG |
+| WebP 处理 | image crate 解码后转 JPEG/PNG |
 | 并行处理 | rayon |
+| 异步任务 | tokio |
 | 配置管理 | serde + toml |
 | 文件对话框 | rfd |
 | 系统调用 | open |
 | 图标嵌入 | embed-resource |
 
-## 测试用例
-
-### 单元测试 (6 个)
-
-| 测试 | 描述 |
-|------|------|
-| `test_compress_jpeg_invalid` | 无效 JPEG 数据返回错误 |
-| `test_compress_png_invalid` | 无效 PNG 数据返回错误 |
-| `test_unsupported_format` | 不支持的格式返回错误 |
-| `test_default_config` | 默认配置值正确 |
-| `test_config_serialization` | 配置序列化/反序列化 |
-| `test_output_dir` | 输出目录路径正确 |
-
-### 集成测试 (31 个)
-
-#### JPEG 压缩测试 (5 个)
-
-| 测试 | 描述 |
-|------|------|
-| `test_compress_jpeg_basic` | 基本 JPEG 压缩 |
-| `test_compress_jpeg_low_quality` | 低质量压缩（更小文件） |
-| `test_compress_jpeg_high_quality` | 高质量压缩 |
-| `test_compress_jpg_extension` | .jpg 扩展名支持 |
-| `test_compress_jpeg_extension` | .jpeg 扩展名支持 |
-
-#### PNG 压缩测试 (4 个)
-
-| 测试 | 描述 |
-|------|------|
-| `test_compress_png_basic` | 基本 PNG 压缩 |
-| `test_compress_png_grayscale` | 灰度 PNG 压缩 |
-| `test_compress_png_transparent` | 透明 PNG 压缩 |
-| `test_compress_large_image` | 大图片压缩 |
-
-#### GIF/SVG 测试 (2 个)
-
-| 测试 | 描述 |
-|------|------|
-| `test_compress_gif_keeps_size` | GIF 保持原样 |
-| `test_compress_svg_keeps_content` | SVG 内容不变 |
-
-#### 错误处理测试 (5 个)
-
-| 测试 | 描述 |
-|------|------|
-| `test_compress_unsupported_bmp` | 不支持 BMP 格式 |
-| `test_compress_unsupported_webp` | 不支持 WebP 格式 |
-| `test_compress_nonexistent_file` | 不存在的文件 |
-| `test_compress_empty_file` | 空文件 |
-| `test_compress_corrupted_jpeg` | 损坏的 JPEG 文件 |
-
-#### 配置测试 (6 个)
-
-| 测试 | 描述 |
-|------|------|
-| `test_config_default_values` | 默认配置值 |
-| `test_config_serialization_roundtrip` | 配置序列化往返 |
-| `test_config_partial_toml` | 不完整的 TOML |
-| `test_config_invalid_values` | 无效配置值 |
-| `test_quality_boundary_values` | 质量边界值 |
-| `test_config_output_dir` | 输出目录路径 |
-| `test_config_save_and_load` | 配置保存和加载 |
-
-#### 文件扩展名测试 (4 个)
-
-| 测试 | 描述 |
-|------|------|
-| `test_compress_uppercase_extension` | 大写扩展名 (.JPG) |
-| `test_compress_mixed_case_extension` | 混合大小写 (.Png) |
-| `test_compress_output_filename_preserved` | 输出文件名保持 |
-| `test_compress_chinese_filename` | 中文文件名 |
-
-#### 批量处理测试 (2 个)
-
-| 测试 | 描述 |
-|------|------|
-| `test_batch_compress_multiple_files` | 批量压缩多文件 |
-| `test_compress_to_same_directory` | 压缩到同目录 |
-
-#### 性能测试 (2 个)
-
-| 测试 | 描述 |
-|------|------|
-| `test_compress_quality_comparison` | 不同质量压缩效果对比 |
-| `test_compress_small_image` | 小图片压缩 |
-
 ## 输出目录
 
-压缩后的文件保存在: `~/retrocode_io/imagemin/<时间戳>/`
+- **时间戳子目录**（默认）：`~/retrocode_io/imagemin/<时间戳>/`
+- **与输入文件同目录**：每个文件输出到各自所在的目录
+- **自定义目录**：用户在设置页选择
 
 ## 配置文件
 
@@ -191,6 +115,10 @@ cvooc-imagemin-compressor/
 [quality]
 jpeg = 80
 png = 80
+
+output_mode = "timestamped"  # timestamped / same_dir / custom
+custom_output_dir = "D:/compressed"
+png_lossless = false
 ```
 
 ## 许可证

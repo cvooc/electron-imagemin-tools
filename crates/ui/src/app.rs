@@ -1,23 +1,25 @@
 use iced::widget::{column, container};
 use iced::{window, Application, Command, Element, Length, Subscription, Theme};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::views::{drop_zone, header, progress, result_table, settings};
+use imagemin_core::{Config, OutputMode};
 
 #[derive(Debug, Clone)]
 pub enum AppState {
     Idle,
-    Compressing,
-    Completed(Vec<result_table::CompressResult>),
+    Compressing { current: usize, total: usize },
+    Completed,
     Settings,
 }
 
 pub struct App {
     state: AppState,
-    quality: imagemin_core::Quality,
+    config: Config,
     files: Vec<PathBuf>,
     hovered_file: Option<PathBuf>,
     output_dir: Option<PathBuf>,
+    results: Vec<result_table::Row>,
 }
 
 #[derive(Debug, Clone)]
@@ -30,7 +32,7 @@ pub enum Message {
     FileHovered(PathBuf),
     FileDropped(PathBuf),
     FileHoveredLeft,
-    CompressFinished(PathBuf, Vec<result_table::CompressResult>),
+    CompressProgress(usize, usize, Option<result_table::Row>, Option<PathBuf>),
 }
 
 impl Application for App {
@@ -40,13 +42,16 @@ impl Application for App {
     type Flags = ();
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
+        let config = Config::load();
+
         (
             Self {
                 state: AppState::Idle,
-                quality: imagemin_core::Quality::default(),
+                config,
                 files: Vec::new(),
                 hovered_file: None,
                 output_dir: None,
+                results: Vec::new(),
             },
             Command::none(),
         )
@@ -90,21 +95,16 @@ impl Application for App {
             Message::Header(header::Message::Close) => {
                 std::process::exit(0);
             }
-            Message::Header(header::Message::Drag) => {
-                window::drag(window::Id::MAIN)
-            }
+            Message::Header(header::Message::Drag) => window::drag(window::Id::MAIN),
             Message::DropZone(drop_zone::Message::SelectFiles) => {
                 Command::perform(select_files(), Message::FilesSelected)
             }
             Message::FilesSelected(files) => {
                 if !files.is_empty() {
                     self.files = files;
-                    self.state = AppState::Compressing;
-                    let files = self.files.clone();
-                    let quality = self.quality.clone();
-                    Command::perform(compress_files(files, quality), |(output_dir, results)| {
-                        Message::CompressFinished(output_dir, results)
-                    })
+                    self.results.clear();
+                    self.output_dir = None;
+                    self.start_compression()
                 } else {
                     Command::none()
                 }
@@ -121,14 +121,11 @@ impl Application for App {
                     .unwrap_or("")
                     .to_lowercase();
 
-                if matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "gif" | "svg") {
+                if matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "gif" | "svg" | "webp") {
                     self.files = vec![path];
-                    self.state = AppState::Compressing;
-                    let files = self.files.clone();
-                    let quality = self.quality.clone();
-                    Command::perform(compress_files(files, quality), |(output_dir, results)| {
-                        Message::CompressFinished(output_dir, results)
-                    })
+                    self.results.clear();
+                    self.output_dir = None;
+                    self.start_compression()
                 } else {
                     Command::none()
                 }
@@ -137,10 +134,34 @@ impl Application for App {
                 self.hovered_file = None;
                 Command::none()
             }
-            Message::CompressFinished(output_dir, results) => {
-                self.state = AppState::Completed(results);
-                self.output_dir = Some(output_dir);
-                Command::none()
+            Message::CompressProgress(index, total, row, output_dir) => {
+                if let Some(row) = row {
+                    self.results.push(row);
+                }
+                if index == 0 {
+                    self.output_dir = output_dir;
+                }
+
+                let next = index + 1;
+                if next < total {
+                    self.state = AppState::Compressing {
+                        current: next,
+                        total,
+                    };
+                    let files = self.files.clone();
+                    let config = self.config.clone();
+                    Command::perform(compress_next(next, files, config), |(
+                        idx,
+                        tot,
+                        row,
+                        out,
+                    )| {
+                        Message::CompressProgress(idx, tot, row, out)
+                    })
+                } else {
+                    self.state = AppState::Completed;
+                    Command::none()
+                }
             }
             Message::ResultTable(result_table::Message::OpenOutputDir) => {
                 if let Some(dir) = &self.output_dir {
@@ -148,12 +169,52 @@ impl Application for App {
                 }
                 Command::none()
             }
+            Message::ResultTable(result_table::Message::RetryCompress) => {
+                if self.files.is_empty() {
+                    self.state = AppState::Idle;
+                    Command::none()
+                } else {
+                    self.results.clear();
+                    self.output_dir = None;
+                    self.start_compression()
+                }
+            }
+            Message::ResultTable(result_table::Message::ClearResults) => {
+                self.results.clear();
+                self.files.clear();
+                self.output_dir = None;
+                self.state = AppState::Idle;
+                Command::none()
+            }
             Message::Settings(settings::Message::JpegChanged(q)) => {
-                self.quality.jpeg = q;
+                self.config.quality.jpeg = q;
+                let _ = self.config.save();
                 Command::none()
             }
             Message::Settings(settings::Message::PngChanged(q)) => {
-                self.quality.png = q;
+                self.config.quality.png = q;
+                let _ = self.config.save();
+                Command::none()
+            }
+            Message::Settings(settings::Message::PngLosslessChanged(v)) => {
+                self.config.png_lossless = v;
+                let _ = self.config.save();
+                Command::none()
+            }
+            Message::Settings(settings::Message::OutputModeChanged(mode)) => {
+                self.config.output_mode = mode;
+                let _ = self.config.save();
+                Command::none()
+            }
+            Message::Settings(settings::Message::SelectCustomOutputDir) => {
+                Command::perform(select_output_dir(), Message::Settings)
+            }
+            Message::Settings(settings::Message::CustomOutputDirSelected(path)) => {
+                if !path.as_os_str().is_empty() {
+                    self.config.custom_output_dir = Some(path);
+                    self.config.output_mode = OutputMode::Custom;
+                    let _ = self.config.save();
+                }
                 Command::none()
             }
         }
@@ -170,11 +231,11 @@ impl Application for App {
                     drop_zone::view().map(Message::DropZone)
                 }
             }
-            AppState::Compressing => {
-                progress::view().map(|_| Message::DropZone(drop_zone::Message::SelectFiles))
-            }
-            AppState::Completed(results) => result_table::view(results).map(Message::ResultTable),
-            AppState::Settings => settings::view(&self.quality).map(Message::Settings),
+            AppState::Compressing { current, total } => progress::view(*current, *total)
+                .map(|_| Message::DropZone(drop_zone::Message::SelectFiles)),
+            AppState::Completed => result_table::view(&self.results, self.output_dir.is_some())
+                .map(Message::ResultTable),
+            AppState::Settings => settings::view(&self.config).map(Message::Settings),
         };
 
         container(column![header, content].width(Length::Fill).height(Length::Fill))
@@ -184,9 +245,26 @@ impl Application for App {
     }
 }
 
+impl App {
+    fn start_compression(&mut self) -> Command<Message> {
+        let total = self.files.len();
+        if total == 0 {
+            self.state = AppState::Idle;
+            return Command::none();
+        }
+
+        self.state = AppState::Compressing { current: 0, total };
+        let files = self.files.clone();
+        let config = self.config.clone();
+        Command::perform(compress_next(0, files, config), |(idx, tot, row, out)| {
+            Message::CompressProgress(idx, tot, row, out)
+        })
+    }
+}
+
 async fn select_files() -> Vec<PathBuf> {
     let files = rfd::AsyncFileDialog::new()
-        .add_filter("Images", &["jpg", "jpeg", "png", "gif", "svg"])
+        .add_filter("Images", &["jpg", "jpeg", "png", "gif", "svg", "webp"])
         .pick_files()
         .await;
 
@@ -195,35 +273,95 @@ async fn select_files() -> Vec<PathBuf> {
         .unwrap_or_default()
 }
 
-async fn compress_files(
-    files: Vec<PathBuf>,
-    quality: imagemin_core::Quality,
-) -> (PathBuf, Vec<result_table::CompressResult>) {
-    let output_dir = imagemin_core::Config::output_dir();
-    let timestamp = chrono::Local::now().format("%Y-%m-%d-%H_%M_%S").to_string();
-    let output = output_dir.join(timestamp);
+async fn select_output_dir() -> settings::Message {
+    let dir = rfd::AsyncFileDialog::new().pick_folder().await;
+    match dir {
+        Some(d) => settings::Message::CustomOutputDirSelected(d.path().to_path_buf()),
+        None => settings::Message::CustomOutputDirSelected(PathBuf::new()),
+    }
+}
 
-    if let Err(e) = std::fs::create_dir_all(&output) {
-        eprintln!("创建输出目录失败: {}", e);
-        return (output, Vec::new());
+fn resolve_output_dir(config: &Config, path: &Path) -> PathBuf {
+    match config.output_mode {
+        OutputMode::Timestamped | OutputMode::Custom => config.resolve_output_dir(Some(path)),
+        OutputMode::SameDir => path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| Config::base_output_dir().join("same_dir")),
+    }
+}
+
+async fn compress_next(
+    index: usize,
+    files: Vec<PathBuf>,
+    config: Config,
+) -> (usize, usize, Option<result_table::Row>, Option<PathBuf>) {
+    let total = files.len();
+    if index >= total {
+        return (index, total, None, None);
     }
 
-    let results = imagemin_core::compress_images(&files, &output, &quality);
+    let path = files[index].clone();
+    let fallback_name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "未知文件".to_string());
+    let panic_name = fallback_name.clone();
 
-    let results: Vec<result_table::CompressResult> = results
-        .into_iter()
-        .filter_map(|r| match r {
-            Ok(result) => Some(result_table::CompressResult {
-                name: result.name,
-                original_size: result.original_size,
-                compressed_size: result.compressed_size,
-            }),
-            Err(e) => {
-                eprintln!("压缩失败: {}", e);
-                None
+    let result = tokio::task::spawn_blocking(move || {
+        let output_dir = resolve_output_dir(&config, &path);
+
+        if let Err(e) = std::fs::create_dir_all(&output_dir) {
+            return (
+                Some(result_table::Row {
+                    name: fallback_name,
+                    original_size: 0,
+                    compressed_size: 0,
+                    status: Err(format!("创建输出目录失败: {}", e)),
+                }),
+                Some(output_dir),
+            );
+        }
+
+        match imagemin_core::compress_image(&path, &output_dir, &config.quality, config.png_lossless)
+        {
+            Ok(result) => {
+                let output_parent = result
+                    .output_path
+                    .parent()
+                    .map(Path::to_path_buf)
+                    .unwrap_or_else(|| output_dir.clone());
+                let row = result_table::Row {
+                    name: result.name,
+                    original_size: result.original_size,
+                    compressed_size: result.compressed_size,
+                    status: Ok(()),
+                };
+                (Some(row), Some(output_parent))
             }
-        })
-        .collect();
+            Err(e) => {
+                let row = result_table::Row {
+                    name: fallback_name,
+                    original_size: 0,
+                    compressed_size: 0,
+                    status: Err(e.to_string()),
+                };
+                (Some(row), Some(output_dir))
+            }
+        }
+    })
+    .await
+    .unwrap_or_else(|e| {
+        (
+            Some(result_table::Row {
+                name: panic_name,
+                original_size: 0,
+                compressed_size: 0,
+                status: Err(format!("压缩任务异常: {}", e)),
+            }),
+            None,
+        )
+    });
 
-    (output, results)
+    (index, total, result.0, result.1)
 }

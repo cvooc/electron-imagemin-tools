@@ -2,45 +2,61 @@
 
 ## 项目概述
 
-基于 Electron 9 + imagemin 的桌面批量图片压缩工具。UI 使用 MDUI + jQuery，界面语言为中文。源码无构建流程，直接加载原始 JS。
+基于 Rust + iced 框架开发的本地图片压缩工具，是旧 Electron 9 + imagemin 方案的重构替代版，目标是显著减小打包体积（从约 200 MB 降至约 26 MB）。UI 使用 iced 原生渲染，界面语言为中文。
 
 ## 命令
 
-- `npm start` — 本地启动 Electron 应用
-- `npm run build` — 使用 electron-packager 打包（输出到 `build/`）
+- `cargo run --release` — 本地运行 GUI 应用
+- `cargo test` / `cargo test -p imagemin-core` — 运行测试
+- `cargo build --release` — 构建发布版本
+- `.\test.ps1` — Windows 测试脚本
+- `.\build.ps1` — Windows 构建脚本，输出到 `dist/cvooc-imagemin-compressor.exe`
 
-项目未配置测试、lint、typecheck 或 CI。
+项目未配置 lint、typecheck 或 CI。
 
 ## 架构
 
-- `main.js` — Electron 主进程：窗口创建、IPC 处理、imagemin 压缩逻辑
-- `www/index.html` — 渲染进程入口（通过 `file://` 协议加载）
-- `www/js/index.js` — 渲染进程逻辑：拖放、文件选择、IPC 通信、UI 更新
-- `www/mdui/` — 内置的 MDUI（Material Design）CSS/JS
-- `www/css/main.css` — 应用样式
-- `public/icon/` — electron-packager 使用的应用图标
-- `examples/image/` — 示例图片
+```
+├── Cargo.toml              # 工作空间配置
+├── crates/
+│   ├── core/               # 核心压缩逻辑
+│   │   ├── src/lib.rs      # 模块导出
+│   │   ├── src/compress.rs # 压缩算法 (mozjpeg + imagequant + oxipng + gif + svg + webp)
+│   │   ├── src/config.rs   # 配置管理
+│   │   └── tests/          # 集成测试
+│   └── ui/                 # iced GUI 界面
+│       ├── src/main.rs     # 入口（字体、窗口设置）
+│       ├── src/app.rs      # 应用状态与消息处理
+│       └── src/views/      # UI 组件
+├── assets/                 # 图标、字体等资源
+└── dist/                   # 发布文件
+```
 
-## IPC 通信流程
+## 通信流程
 
-渲染进程 → 主进程：`req-comp-files`（文件信息数组 + 质量参数）
-主进程 → 渲染进程：`rsp-comp-files`（压缩结果 + 输出目录）或 `rsp-comp-files-error`
-
-窗口控制：`close-main-window`、`min-main-window`
+iced 采用 Elm 架构：
+- `app.rs` 中的 `Message` 枚举定义所有用户事件和异步结果。
+- `update()` 处理消息，`view()` 根据 `AppState` 渲染对应界面。
+- 文件选择使用 `rfd::AsyncFileDialog`。
+- 压缩在 `tokio` 异步任务中调用 `imagemin_core::compress_images`。
 
 ## 关键细节
 
-- BrowserWindow 设置了 `nodeIntegration: true`，渲染进程拥有完整 Node.js 访问权限
-- 压缩输出目录：`~/retrocode_io/imagemin/<时间戳>/`
-- 支持格式：JPEG、PNG、GIF、SVG（BMP 和 WebP 插件存在但已注释掉）
-- 质量设置存储在 `localStorage` 中，键名：`jpg-quality`、`pngQ-quality`、`webpQ-quality`
-- PNG 质量范围在渲染进程中被限制为 21–100（pngquant 要求）
-- `main.js` 中扩展了 `Date.prototype.format`，用于生成输出目录名
-- 构建脚本硬编码了 Electron 9.0.3 版本，并使用淘宝镜像下载 Electron 二进制文件
+- 主窗口无边框（`decorations: false`），标题栏支持拖动。
+- 压缩输出目录模式由 `Config.output_mode` 控制：
+  - `Timestamped`：`~/retrocode_io/imagemin/<时间戳>/`（默认）
+  - `SameDir`：与输入文件同目录
+  - `Custom`：用户自定义目录
+- 配置文件路径：`~/.config/cvooc-imagemin-compressor/config.toml`
+- 支持格式：JPEG、PNG、GIF、SVG、WebP
+- 质量范围：JPEG 0–100，PNG 0–100（imagequant 内部最低质量为 0）
+- 配置保存时机：应用启动加载，设置页修改后立即保存
+- 字体处理：`assets/` 目录嵌入字体文件，同时以 "Microsoft YaHei" 作为系统 fallback
 
 ## 代码风格
 
-- 无模块打包器或转译器，主进程和渲染进程均直接使用 `require()`
-- 渲染进程使用 jQuery 操作 DOM
-- `var`/`const` 混用，注释为中文
-- 发版时需更新 `www/js/index.js` 中的 `version` 常量
+- Rust 2021 edition，使用 `cargo fmt` 格式化。
+- 核心错误处理使用 `thiserror` 定义的 `CompressError`。
+- UI 消息使用 iced 的 `Command::perform` 发起异步任务。
+- 注释为中文。
+- 发版时需更新 `Cargo.toml` workspace `version`。

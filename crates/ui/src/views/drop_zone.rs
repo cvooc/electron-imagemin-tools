@@ -22,7 +22,7 @@ fn drop_zone_style(_theme: &Theme) -> container::Appearance {
 pub fn view() -> Element<'static, Message> {
     let content = column![
         text("点击选择图片 / 拖放图片").size(20),
-        text("支持格式：JPG/PNG/GIF/SVG").size(14),
+        text("支持格式：JPG/PNG/GIF/SVG/WebP").size(14),
     ]
     .spacing(12);
 
@@ -44,7 +44,7 @@ pub fn view() -> Element<'static, Message> {
 pub fn view_hovered() -> Element<'static, Message> {
     let content = column![
         text("释放鼠标以添加图片").size(20),
-        text("支持格式：JPG/PNG/GIF/SVG").size(14),
+        text("支持格式：JPG/PNG/GIF/SVG/WebP").size(14),
     ]
     .spacing(12);
 
