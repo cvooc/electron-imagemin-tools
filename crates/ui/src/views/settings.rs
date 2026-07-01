@@ -1,6 +1,8 @@
 use iced::widget::{button, checkbox, column, container, row, scrollable, slider, text};
-use iced::{Element, Length};
+use iced::{Element, Length, Color};
 use imagemin_core::{Config, OutputMode, ThemeMode};
+
+use crate::app::LogEntry;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -11,9 +13,18 @@ pub enum Message {
     ThemeChanged(ThemeMode),
     SelectCustomOutputDir,
     CustomOutputDirSelected(std::path::PathBuf),
+    CopyErrorLog,
 }
 
-pub fn view(config: &Config) -> Element<'static, Message> {
+fn log_item_style(_theme: &iced::Theme) -> container::Appearance {
+    container::Appearance {
+        background: Some(iced::Background::Color(Color::from_rgba(0.8, 0.2, 0.2, 0.08))),
+        border: iced::Border { radius: 4.0.into(), ..Default::default() },
+        ..Default::default()
+    }
+}
+
+pub fn view(config: &Config, logs: &[LogEntry]) -> Element<'static, Message> {
     let jpeg_slider = row![
         text(format!("JPEG (当前质量: {})", config.quality.jpeg)).width(Length::FillPortion(1)),
         slider(0..=100, config.quality.jpeg, Message::JpegChanged).width(Length::FillPortion(2)),
@@ -55,7 +66,7 @@ pub fn view(config: &Config) -> Element<'static, Message> {
     .spacing(12);
 
     let version = env!("CARGO_PKG_VERSION");
-    let content = column![
+    let mut content = column![
         text("主题").size(18),
         theme_buttons,
         text(""),
@@ -75,6 +86,34 @@ pub fn view(config: &Config) -> Element<'static, Message> {
     ]
     .spacing(16)
     .padding(20);
+
+    // 压缩失败日志
+    content = content.push(text(""));
+    content = content.push(text("压缩失败日志").size(18));
+    if logs.is_empty() {
+        content = content.push(text("暂无失败日志").size(14).style(Color::from_rgb(0.5, 0.5, 0.5)));
+    } else {
+        let log_count = logs.len();
+        content = content.push(
+            row![
+                text(format!("共 {} 条失败记录", log_count)).size(14).style(Color::from_rgb(0.7, 0.3, 0.3)),
+                button(text("一键复制日志").size(12)).on_press(Message::CopyErrorLog),
+            ]
+            .spacing(12),
+        );
+        for log in logs.iter().rev().take(20) {
+            let log_item = column![
+                text(&log.timestamp).size(11).style(Color::from_rgb(0.5, 0.5, 0.5)),
+                text(&log.filename).size(13),
+                text(&log.error).size(12).style(Color::from_rgb(0.8, 0.2, 0.2)),
+            ]
+            .spacing(2)
+            .padding([6, 8]);
+            content = content.push(container(log_item)
+                .style(log_item_style)
+                .padding(2));
+        }
+    }
 
     container(scrollable(content))
         .width(Length::Fill)

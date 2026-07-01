@@ -16,6 +16,15 @@ pub enum AppState {
     History,
 }
 
+/// 压缩失败日志条目
+#[derive(Debug, Clone)]
+pub struct LogEntry {
+    pub timestamp: String,
+    pub filename: String,
+    pub error: String,
+    pub input_path: String,
+}
+
 pub struct App {
     state: AppState,
     config: Config,
@@ -30,6 +39,8 @@ pub struct App {
     history: History,
     /// 取消压缩标志
     cancel_flag: Option<Arc<AtomicBool>>,
+    /// 压缩失败日志
+    logs: Vec<LogEntry>,
 }
 
 #[derive(Debug, Clone)]
@@ -81,6 +92,7 @@ impl Application for App {
                 show_clear_modal: false,
                 history: History::load(),
                 cancel_flag: None,
+                logs: Vec::new(),
             },
             Command::none(),
         )
@@ -218,6 +230,15 @@ impl Application for App {
             }
             Message::CompressProgress(index, total, row, output_dir) => {
                 if let Some(row) = row {
+                    // 记录失败日志
+                    if let Err(ref err) = row.status {
+                        self.logs.push(LogEntry {
+                            timestamp: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                            filename: row.name.clone(),
+                            error: err.clone(),
+                            input_path: row.input_path.as_ref().map(|p| p.to_string_lossy().to_string()).unwrap_or_default(),
+                        });
+                    }
                     self.results.push(row);
                 }
                 if index == 0 {
@@ -369,6 +390,21 @@ impl Application for App {
                 }
                 Command::none()
             }
+            Message::Settings(settings::Message::CopyErrorLog) => {
+                let log_text: String = self
+                    .logs
+                    .iter()
+                    .map(|l| format!("[{}] {} — {}\n  路径: {}", l.timestamp, l.filename, l.error, l.input_path))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if log_text.is_empty() {
+                    self.toast = Some(toast::Toast::info("暂无失败日志"));
+                    Command::none()
+                } else {
+                    self.toast = Some(toast::Toast::success("日志已复制到剪贴板"));
+                    iced::clipboard::write(log_text)
+                }
+            }
             Message::KeyPressed(key, modifiers) => {
                 use iced::keyboard::Key;
                 let ctrl = modifiers.control();
@@ -422,7 +458,7 @@ impl Application for App {
             }
             AppState::Completed => result_table::view(&self.results, self.output_dir.is_some())
                 .map(Message::ResultTable),
-            AppState::Settings => settings::view(&self.config).map(Message::Settings),
+            AppState::Settings => settings::view(&self.config, &self.logs).map(Message::Settings),
             AppState::History => history::view(&self.history.entries).map(Message::History),
         };
 
