@@ -131,9 +131,22 @@ fn compress_png_raw(rgba: &image::RgbaImage, quality: u8) -> Result<Vec<u8>, Com
 
 fn compress_png(input: &[u8], quality: u8, lossless: bool) -> Result<Vec<u8>, CompressError> {
     // 先尝试用 oxipng 无损优化一遍，作为基准。
-    let lossless_optimized =
-        oxipng::optimize_from_memory(input, &oxipng::Options::from_preset(3))
-            .map_err(|e| CompressError::Image(e.to_string()))?;
+    // 若文件不是真实 PNG（扩展名误判），回退到 image 解码后重编码。
+    let lossless_optimized = match oxipng::optimize_from_memory(input, &oxipng::Options::from_preset(3))
+    {
+        Ok(data) => data,
+        Err(oxipng_err) => {
+            // oxipng 失败时尝试用 image 解码后另存为 PNG
+            let img = match image::load_from_memory(input) {
+                Ok(img) => img,
+                Err(_) => return Err(CompressError::Image(format!(
+                    "文件不是合法 PNG 格式: {}", oxipng_err
+                ))),
+            };
+            let rgba = img.to_rgba8();
+            return quantize_to_indexed_png(&rgba, quality);
+        }
+    };
 
     if lossless {
         return Ok(lossless_optimized);
