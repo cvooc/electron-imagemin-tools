@@ -18,6 +18,46 @@ impl Default for OutputMode {
     }
 }
 
+/// 界面主题模式
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ThemeMode {
+    /// 跟随系统
+    System,
+    /// 浅色模式
+    Light,
+    /// 深色模式
+    Dark,
+}
+
+impl Default for ThemeMode {
+    fn default() -> Self {
+        Self::System
+    }
+}
+
+/// 输出图片格式
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OutputFormat {
+    /// 保持原格式
+    Original,
+    /// 转为 JPEG
+    Jpeg,
+    /// 转为 PNG
+    Png,
+    /// 转为 WebP（暂未实现编码，保留选项）
+    WebP,
+    /// 转为 AVIF
+    Avif,
+}
+
+impl Default for OutputFormat {
+    fn default() -> Self {
+        Self::Original
+    }
+}
+
 fn default_jpeg_quality() -> u8 {
     80
 }
@@ -72,6 +112,16 @@ pub struct Config {
     pub custom_output_dir: Option<PathBuf>,
     /// PNG 是否使用纯无损优化。默认为 false，即对 RGB/RGBA 图片启用有损量化。
     pub png_lossless: bool,
+    /// 界面主题模式。默认跟随系统。
+    pub theme: ThemeMode,
+    /// 图片最大宽度（像素），超出则等比缩小。None 表示不限制。
+    pub max_width: Option<u32>,
+    /// 图片最大高度（像素），超出则等比缩小。None 表示不限制。
+    pub max_height: Option<u32>,
+    /// 是否剥离元数据（EXIF、XMP、ICC 等）。
+    pub strip_metadata: bool,
+    /// 输出图片格式。默认保持原格式。
+    pub output_format: OutputFormat,
 }
 
 impl Default for Config {
@@ -81,6 +131,11 @@ impl Default for Config {
             output_mode: OutputMode::default(),
             custom_output_dir: None,
             png_lossless: false,
+            theme: ThemeMode::default(),
+            max_width: None,
+            max_height: None,
+            strip_metadata: false,
+            output_format: OutputFormat::default(),
         }
     }
 }

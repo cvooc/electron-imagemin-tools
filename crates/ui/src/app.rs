@@ -2,15 +2,16 @@ use iced::widget::{column, container};
 use iced::{window, Application, Command, Element, Length, Subscription, Theme};
 use std::path::{Path, PathBuf};
 
-use crate::views::{drop_zone, header, progress, result_table, settings};
-use imagemin_core::{Config, OutputMode};
+use crate::views::{drop_zone, header, history, modal, progress, result_table, settings, stack, toast};
+use imagemin_core::{Config, History, HistoryEntry, OutputMode, ThemeMode};
 
 #[derive(Debug, Clone)]
 pub enum AppState {
     Idle,
-    Compressing { current: usize, total: usize },
+    Compressing { completed: usize, total: usize },
     Completed,
     Settings,
+    History,
 }
 
 pub struct App {
@@ -20,6 +21,11 @@ pub struct App {
     hovered_file: Option<PathBuf>,
     output_dir: Option<PathBuf>,
     results: Vec<result_table::Row>,
+    toast: Option<toast::Toast>,
+    /// 是否显示清空列表确认弹窗
+    show_clear_modal: bool,
+    /// 压缩历史记录
+    history: History,
 }
 
 #[derive(Debug, Clone)]
@@ -28,11 +34,19 @@ pub enum Message {
     DropZone(drop_zone::Message),
     ResultTable(result_table::Message),
     Settings(settings::Message),
+    History(history::Message),
     FilesSelected(Vec<PathBuf>),
     FileHovered(PathBuf),
     FileDropped(PathBuf),
     FileHoveredLeft,
     CompressProgress(usize, usize, Option<result_table::Row>, Option<PathBuf>),
+    /// 键盘快捷键
+    KeyPressed(iced::keyboard::Key, iced::keyboard::Modifiers),
+    /// Toast 超时自动关闭
+    ToastTimeout,
+    /// Modal 确认清空
+    ConfirmClear,
+    CancelClear,
 }
 
 impl Application for App {
@@ -52,6 +66,9 @@ impl Application for App {
                 hovered_file: None,
                 output_dir: None,
                 results: Vec::new(),
+                toast: None,
+                show_clear_modal: false,
+                history: History::load(),
             },
             Command::none(),
         )
@@ -61,8 +78,22 @@ impl Application for App {
         String::from("retrocode.io压图")
     }
 
+    fn theme(&self) -> Theme {
+        match self.config.theme {
+            ThemeMode::Light => Theme::Light,
+            ThemeMode::Dark => Theme::Dark,
+            ThemeMode::System => {
+                if detect_system_is_dark() {
+                    Theme::Dark
+                } else {
+                    Theme::Light
+                }
+            }
+        }
+    }
+
     fn subscription(&self) -> Subscription<Message> {
-        iced::event::listen_with(|event, _status| match event {
+        let file_events = iced::event::listen_with(|event, _status| match event {
             iced::Event::Window(_, iced::window::Event::FileHovered(path)) => {
                 Some(Message::FileHovered(path))
             }
@@ -73,7 +104,23 @@ impl Application for App {
                 Some(Message::FileHoveredLeft)
             }
             _ => None,
-        })
+        });
+
+        let keyboard = iced::keyboard::on_key_press(|key, modifiers| {
+            Some(Message::KeyPressed(key, modifiers))
+        });
+
+        let mut subs = vec![file_events, keyboard];
+
+        // Toast 自动消失定时器
+        if self.toast.is_some() {
+            subs.push(
+                iced::time::every(std::time::Duration::from_secs(3))
+                    .map(|_| Message::ToastTimeout),
+            );
+        }
+
+        Subscription::batch(subs)
     }
 
     fn update(&mut self, message: Message) -> Command<Message> {
@@ -85,6 +132,18 @@ impl Application for App {
                     }
                     _ => {
                         self.state = AppState::Settings;
+                    }
+                }
+                Command::none()
+            }
+            Message::Header(header::Message::OpenHistory) => {
+                match self.state {
+                    AppState::History => {
+                        self.state = AppState::Idle;
+                    }
+                    _ => {
+                        self.history = History::load();
+                        self.state = AppState::History;
                     }
                 }
                 Command::none()
@@ -115,14 +174,25 @@ impl Application for App {
             }
             Message::FileDropped(path) => {
                 self.hovered_file = None;
-                let ext = path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or("")
-                    .to_lowercase();
 
-                if matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "gif" | "svg" | "webp") {
-                    self.files = vec![path];
+                // 如果是目录，扫描其中的图片文件
+                let files: Vec<PathBuf> = if path.is_dir() {
+                    collect_images_from_dir(&path)
+                } else {
+                    let ext = path
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .unwrap_or("")
+                        .to_lowercase();
+                    if matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "gif" | "svg" | "webp") {
+                        vec![path]
+                    } else {
+                        Vec::new()
+                    }
+                };
+
+                if !files.is_empty() {
+                    self.files = files;
                     self.results.clear();
                     self.output_dir = None;
                     self.start_compression()
@@ -142,26 +212,55 @@ impl Application for App {
                     self.output_dir = output_dir;
                 }
 
-                let next = index + 1;
-                if next < total {
-                    self.state = AppState::Compressing {
-                        current: next,
-                        total,
-                    };
-                    let files = self.files.clone();
-                    let config = self.config.clone();
-                    Command::perform(compress_next(next, files, config), |(
-                        idx,
-                        tot,
-                        row,
-                        out,
-                    )| {
-                        Message::CompressProgress(idx, tot, row, out)
-                    })
+                let completed = self.results.len();
+                if completed < total {
+                    self.state = AppState::Compressing { completed, total };
+                    Command::none()
                 } else {
                     self.state = AppState::Completed;
+                    // 保存历史记录
+                    let history_results: Vec<imagemin_core::history::HistoryResult> = self.results.iter().map(|r| {
+                        imagemin_core::history::HistoryResult {
+                            name: r.name.clone(),
+                            original_size: r.original_size,
+                            compressed_size: r.compressed_size,
+                            success: r.status.is_ok(),
+                        }
+                    }).collect();
+                    let total_original: u64 = history_results.iter().filter(|r| r.success).map(|r| r.original_size).sum();
+                    let total_compressed: u64 = history_results.iter().filter(|r| r.success).map(|r| r.compressed_size).sum();
+                    let entry = HistoryEntry {
+                        timestamp_ms: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,
+                        timestamp_str: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                        results: history_results,
+                        output_dir: self.output_dir.clone().unwrap_or_default(),
+                        total_original,
+                        total_compressed,
+                    };
+                    self.history.add(entry);
+                    let _ = self.history.save();
+                    // 计算总节省量并触发 toast
+                    let total_original: u64 = self.results.iter().filter_map(|r| r.status.is_ok().then(|| r.original_size)).sum();
+                    let total_compressed: u64 = self.results.iter().filter_map(|r| r.status.is_ok().then(|| r.compressed_size)).sum();
+                    let saved = total_original as i64 - total_compressed as i64;
+                    if saved >= 0 {
+                        self.toast = Some(toast::Toast::success(format!(
+                            "压缩完成，共节省 {:.1} KB",
+                            saved as f64 / 1024.0
+                        )));
+                    } else {
+                        self.toast = Some(toast::Toast::info("压缩完成".to_string()));
+                    }
                     Command::none()
                 }
+            }
+            Message::History(history::Message::Back) => {
+                self.state = AppState::Idle;
+                Command::none()
+            }
+            Message::History(history::Message::OpenDir(dir)) => {
+                open::that(&dir).ok();
+                Command::none()
             }
             Message::ResultTable(result_table::Message::OpenOutputDir) => {
                 if let Some(dir) = &self.output_dir {
@@ -180,10 +279,33 @@ impl Application for App {
                 }
             }
             Message::ResultTable(result_table::Message::ClearResults) => {
+                // 显示确认弹窗而非直接清空
+                self.show_clear_modal = true;
+                Command::none()
+            }
+            Message::ResultTable(result_table::Message::Preview(idx)) => {
+                if let Some(row) = self.results.get(idx) {
+                    // 用系统默认图片查看器打开原图和压缩后的图
+                    if let Some(p) = &row.input_path {
+                        open::that(p).ok();
+                    }
+                    if let Some(p) = &row.output_path {
+                        open::that(p).ok();
+                    }
+                }
+                Command::none()
+            }
+            Message::ConfirmClear => {
+                self.show_clear_modal = false;
                 self.results.clear();
                 self.files.clear();
                 self.output_dir = None;
                 self.state = AppState::Idle;
+                self.toast = Some(toast::Toast::info("列表已清空"));
+                Command::none()
+            }
+            Message::CancelClear => {
+                self.show_clear_modal = false;
                 Command::none()
             }
             Message::Settings(settings::Message::JpegChanged(q)) => {
@@ -206,6 +328,11 @@ impl Application for App {
                 let _ = self.config.save();
                 Command::none()
             }
+            Message::Settings(settings::Message::ThemeChanged(theme)) => {
+                self.config.theme = theme;
+                let _ = self.config.save();
+                Command::none()
+            }
             Message::Settings(settings::Message::SelectCustomOutputDir) => {
                 Command::perform(select_output_dir(), Message::Settings)
             }
@@ -215,6 +342,34 @@ impl Application for App {
                     self.config.output_mode = OutputMode::Custom;
                     let _ = self.config.save();
                 }
+                Command::none()
+            }
+            Message::KeyPressed(key, modifiers) => {
+                use iced::keyboard::Key;
+                let ctrl = modifiers.control();
+                match (key, ctrl) {
+                    // Escape: 返回主界面
+                    (Key::Named(iced::keyboard::key::Named::Escape), _) => {
+                        if matches!(self.state, AppState::Settings) {
+                            self.state = AppState::Idle;
+                        }
+                        Command::none()
+                    }
+                    // Ctrl+O: 打开文件选择
+                    (Key::Character(c), true) if c.as_str() == "o" => {
+                        Command::perform(select_files(), Message::FilesSelected)
+                    }
+                    // Ctrl+R: 重新压缩
+                    (Key::Character(c), true) if c.as_str() == "r" => {
+                        self.results.clear();
+                        self.output_dir = None;
+                        self.start_compression()
+                    }
+                    _ => Command::none(),
+                }
+            }
+            Message::ToastTimeout => {
+                self.toast = None;
                 Command::none()
             }
         }
@@ -228,20 +383,61 @@ impl Application for App {
                 if self.hovered_file.is_some() {
                     drop_zone::view_hovered().map(Message::DropZone)
                 } else {
-                    drop_zone::view().map(Message::DropZone)
+                    drop_zone::view(self.files.len()).map(Message::DropZone)
                 }
             }
-            AppState::Compressing { current, total } => progress::view(*current, *total)
-                .map(|_| Message::DropZone(drop_zone::Message::SelectFiles)),
+            AppState::Compressing { completed, total } => {
+                let current_file = self
+                    .files
+                    .get(*completed)
+                    .and_then(|p| p.file_name())
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "…".to_string());
+                progress::view(*completed, *total, &current_file)
+                    .map(|_| Message::DropZone(drop_zone::Message::SelectFiles))
+            }
             AppState::Completed => result_table::view(&self.results, self.output_dir.is_some())
                 .map(Message::ResultTable),
             AppState::Settings => settings::view(&self.config).map(Message::Settings),
+            AppState::History => history::view(&self.history.entries).map(Message::History),
         };
 
-        container(column![header, content].width(Length::Fill).height(Length::Fill))
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        let toast_element: Element<'_, Message> = match &self.toast {
+            Some(t) => container(toast::view(t).map(|_| Message::ToastTimeout))
+                .width(Length::Fill)
+                .align_x(iced::alignment::Horizontal::Center)
+                .padding([0, 0, 16, 0])
+                .into(),
+            None => container(iced::widget::text(""))
+                .height(Length::Fixed(0.0))
+                .into(),
+        };
+
+        let main = container(
+            column![header, content, toast_element]
+                .width(Length::Fill)
+                .height(Length::Fill),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill);
+
+        // 弹窗激活时使用 Stack 叠加在半透明蒙层之上
+        if self.show_clear_modal {
+            let clear_modal = modal::Modal {
+                title: "确认清空".to_string(),
+                message: "确定要清空所有压缩结果和文件列表吗？此操作不可撤销。".to_string(),
+                confirm_label: "确定清空".to_string(),
+                cancel_label: "取消".to_string(),
+                on_confirm: Message::ConfirmClear,
+                on_cancel: Message::CancelClear,
+            };
+            stack::Stack::new()
+                .push(main)
+                .push(modal::view(&clear_modal))
+                .into()
+        } else {
+            main.into()
+        }
     }
 }
 
@@ -253,12 +449,24 @@ impl App {
             return Command::none();
         }
 
-        self.state = AppState::Compressing { current: 0, total };
-        let files = self.files.clone();
-        let config = self.config.clone();
-        Command::perform(compress_next(0, files, config), |(idx, tot, row, out)| {
-            Message::CompressProgress(idx, tot, row, out)
-        })
+        self.state = AppState::Compressing { completed: 0, total };
+
+        // 并行发起所有压缩任务
+        let cmds: Vec<Command<Message>> = self
+            .files
+            .iter()
+            .enumerate()
+            .map(|(i, path)| {
+                let path = path.clone();
+                let config = self.config.clone();
+                Command::perform(
+                    compress_single(i, total, path, config),
+                    move |(idx, tot, row, out)| Message::CompressProgress(idx, tot, row, out),
+                )
+            })
+            .collect();
+
+        Command::batch(cmds)
     }
 }
 
@@ -291,17 +499,39 @@ fn resolve_output_dir(config: &Config, path: &Path) -> PathBuf {
     }
 }
 
-async fn compress_next(
+/// 递归扫描目录中的图片文件。
+fn collect_images_from_dir(dir: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    let supported = ["jpg", "jpeg", "png", "gif", "svg", "webp"];
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                files.extend(collect_images_from_dir(&path));
+            } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                if supported.contains(&ext.to_lowercase().as_str()) {
+                    files.push(path);
+                }
+            }
+        }
+    }
+    files
+}
+
+/// 检测系统是否为深色模式。
+fn detect_system_is_dark() -> bool {
+    match dark_light::detect() {
+        dark_light::Mode::Dark => true,
+        _ => false,
+    }
+}
+
+async fn compress_single(
     index: usize,
-    files: Vec<PathBuf>,
+    total: usize,
+    path: PathBuf,
     config: Config,
 ) -> (usize, usize, Option<result_table::Row>, Option<PathBuf>) {
-    let total = files.len();
-    if index >= total {
-        return (index, total, None, None);
-    }
-
-    let path = files[index].clone();
     let fallback_name = path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -318,12 +548,23 @@ async fn compress_next(
                     original_size: 0,
                     compressed_size: 0,
                     status: Err(format!("创建输出目录失败: {}", e)),
+                    input_path: Some(path.clone()),
+                    output_path: None,
                 }),
                 Some(output_dir),
             );
         }
 
-        match imagemin_core::compress_image(&path, &output_dir, &config.quality, config.png_lossless)
+        match imagemin_core::compress_image(
+            &path,
+            &output_dir,
+            &config.quality,
+            config.png_lossless,
+            config.output_format,
+            config.max_width,
+            config.max_height,
+            config.strip_metadata,
+        )
         {
             Ok(result) => {
                 let output_parent = result
@@ -336,6 +577,8 @@ async fn compress_next(
                     original_size: result.original_size,
                     compressed_size: result.compressed_size,
                     status: Ok(()),
+                    input_path: Some(path.clone()),
+                    output_path: Some(result.output_path.clone()),
                 };
                 (Some(row), Some(output_parent))
             }
@@ -345,6 +588,8 @@ async fn compress_next(
                     original_size: 0,
                     compressed_size: 0,
                     status: Err(e.to_string()),
+                    input_path: Some(path.clone()),
+                    output_path: None,
                 };
                 (Some(row), Some(output_dir))
             }
@@ -358,6 +603,8 @@ async fn compress_next(
                 original_size: 0,
                 compressed_size: 0,
                 status: Err(format!("压缩任务异常: {}", e)),
+                input_path: None,
+                output_path: None,
             }),
             None,
         )

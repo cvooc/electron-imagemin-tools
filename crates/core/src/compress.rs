@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
+use super::config::OutputFormat;
+
 #[derive(Error, Debug)]
 pub enum CompressError {
     #[error("IO error: {0}")]
@@ -292,11 +294,108 @@ fn compress_webp(
     }
 }
 
+/// 如果图片尺寸超出限制，等比缩小。
+fn resize_if_needed(
+    img: image::DynamicImage,
+    max_width: Option<u32>,
+    max_height: Option<u32>,
+) -> image::DynamicImage {
+    let (w, h) = (img.width(), img.height());
+    let limit_w = max_width.unwrap_or(u32::MAX);
+    let limit_h = max_height.unwrap_or(u32::MAX);
+
+    if w <= limit_w && h <= limit_h {
+        return img;
+    }
+
+    let ratio = (limit_w as f64 / w as f64).min(limit_h as f64 / h as f64);
+    let new_w = (w as f64 * ratio) as u32;
+    let new_h = (h as f64 * ratio) as u32;
+
+    img.resize_exact(new_w, new_h, image::imageops::FilterType::Lanczos3)
+}
+
+/// 剥离 PNG 中的元数据块（EXIF、XMP、ICC 等辅助块）。
+/// 对于 JPEG，mozjpeg 重新编码时默认不写入元数据。
+fn strip_metadata_from_png(data: &[u8]) -> Result<Vec<u8>, CompressError> {
+    let opts = oxipng::Options {
+        strip: oxipng::StripChunks::Safe,
+        ..oxipng::Options::from_preset(3)
+    };
+    oxipng::optimize_from_memory(data, &opts)
+        .map_err(|e| CompressError::Image(e.to_string()))
+}
+
+/// 将 RGBA 数据编码为 AVIF。
+fn compress_avif_raw(
+    rgba: &image::RgbaImage,
+    quality: u8,
+) -> Result<Vec<u8>, CompressError> {
+    use ravif::{encode_rgba, Config, Img};
+
+    let (width, height) = rgba.dimensions();
+
+    // image::RgbaImage 使用 [u8; 4]，需转为 rgb::RGBA<u8>
+    let pixels: Vec<rgb::RGBA<u8>> = rgba
+        .pixels()
+        .map(|p| rgb::RGBA::new(p[0], p[1], p[2], p[3]))
+        .collect();
+    let img = Img::new(pixels.as_slice(), width as usize, height as usize);
+
+    let config = Config {
+        quality: quality as f32,
+        alpha_quality: quality as f32,
+        speed: 4,
+        premultiplied_alpha: false,
+        color_space: ravif::ColorSpace::RGB,
+        threads: 0,
+    };
+
+    let (data, _, _) = encode_rgba(img, &config)
+        .map_err(|e| CompressError::Image(format!("AVIF 编码失败: {}", e)))?;
+
+    Ok(data)
+}
+
+/// 将 RGB 数据编码为 AVIF。
+fn compress_avif_from_rgb(
+    rgb: &image::RgbImage,
+    quality: u8,
+) -> Result<Vec<u8>, CompressError> {
+    use ravif::{encode_rgb, Config, Img};
+
+    let (width, height) = rgb.dimensions();
+
+    let pixels: Vec<rgb::RGB<u8>> = rgb
+        .pixels()
+        .map(|p| rgb::RGB::new(p[0], p[1], p[2]))
+        .collect();
+    let img = Img::new(pixels.as_slice(), width as usize, height as usize);
+
+    let config = Config {
+        quality: quality as f32,
+        alpha_quality: quality as f32,
+        speed: 4,
+        premultiplied_alpha: false,
+        color_space: ravif::ColorSpace::RGB,
+        threads: 0,
+    };
+
+    let (data, _) = encode_rgb(img, &config)
+        .map_err(|e| CompressError::Image(format!("AVIF 编码失败: {}", e)))?;
+
+    Ok(data)
+}
+
 pub fn compress_image(
     input_path: &Path,
     output_dir: &Path,
     quality: &super::config::Quality,
     png_lossless: bool,
+    output_format: OutputFormat,
+    max_width: Option<u32>,
+    max_height: Option<u32>,
+    strip_metadata: bool,
 ) -> Result<CompressResult, CompressError> {
     quality
         .validate()
@@ -315,32 +414,52 @@ pub fn compress_image(
         .to_string_lossy()
         .to_string();
 
-    let (output_filename, compressed) = match ext.as_str() {
-        "jpg" | "jpeg" => (filename, compress_jpeg(&input, quality.jpeg)?),
-        "png" => (filename, compress_png(&input, quality.png, png_lossless)?),
-        "gif" => (filename, compress_gif(&input, quality.png)?),
-        "svg" => {
-            let png_name = filename
-                .rsplit_once('.')
-                .map(|(name, _)| format!("{}.png", name))
-                .unwrap_or_else(|| format!("{}.png", filename));
-            (png_name, compress_svg(&input, quality.png)?)
+    let (output_filename, compressed) = match output_format {
+        OutputFormat::Original => {
+            // 保持原格式，使用原有逻辑
+            compress_original(&input, &filename, &ext, quality, png_lossless)?
         }
-        "webp" => {
-            let output_name = if input_path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .map(|s| s.to_lowercase().ends_with("-lossless"))
-                .unwrap_or(false)
-            {
-                filename
+        OutputFormat::Jpeg => {
+            let new_name = change_extension(&filename, "jpg");
+            let img = image::load_from_memory(&input)
+                .map_err(|e| CompressError::Image(e.to_string()))?;
+            let img = resize_if_needed(img, max_width, max_height);
+            let rgb = img.to_rgb8();
+            (new_name, compress_jpeg_raw(&rgb, quality.jpeg)?)
+        }
+        OutputFormat::Png => {
+            let new_name = change_extension(&filename, "png");
+            let img = image::load_from_memory(&input)
+                .map_err(|e| CompressError::Image(e.to_string()))?;
+            let img = resize_if_needed(img, max_width, max_height);
+            let rgba = img.to_rgba8();
+            let mut data = compress_png_raw(&rgba, quality.png)?;
+            if strip_metadata {
+                data = strip_metadata_from_png(&data)?;
+            }
+            (new_name, data)
+        }
+        OutputFormat::WebP => {
+            // WebP 编码暂未实现，转为 PNG
+            let new_name = change_extension(&filename, "png");
+            let img = image::load_from_memory(&input)
+                .map_err(|e| CompressError::Image(e.to_string()))?;
+            let img = resize_if_needed(img, max_width, max_height);
+            let rgba = img.to_rgba8();
+            (new_name, compress_png_raw(&rgba, quality.png)?)
+        }
+        OutputFormat::Avif => {
+            let new_name = change_extension(&filename, "avif");
+            let img = image::load_from_memory(&input)
+                .map_err(|e| CompressError::Image(e.to_string()))?;
+            let img = resize_if_needed(img, max_width, max_height);
+            let data = if img.color().has_alpha() {
+                compress_avif_raw(&img.to_rgba8(), quality.jpeg)?
             } else {
-                let stem = filename.rsplit_once('.').map(|(s, _)| s).unwrap_or(&filename);
-                format!("{}.jpg", stem)
+                compress_avif_from_rgb(&img.to_rgb8(), quality.jpeg)?
             };
-            (output_name, compress_webp(&input, quality, png_lossless)?)
+            (new_name, data)
         }
-        _ => return Err(CompressError::UnsupportedFormat(ext)),
     };
 
     let output_path = output_dir.join(&output_filename);
@@ -355,17 +474,62 @@ pub fn compress_image(
     })
 }
 
+/// 保持原格式的压缩逻辑。
+fn compress_original(
+    input: &[u8],
+    filename: &str,
+    ext: &str,
+    quality: &super::config::Quality,
+    png_lossless: bool,
+) -> Result<(String, Vec<u8>), CompressError> {
+    match ext {
+        "jpg" | "jpeg" => Ok((filename.to_string(), compress_jpeg(input, quality.jpeg)?)),
+        "png" => Ok((filename.to_string(), compress_png(input, quality.png, png_lossless)?)),
+        "gif" => Ok((filename.to_string(), compress_gif(input, quality.png)?)),
+        "svg" => {
+            let png_name = filename
+                .rsplit_once('.')
+                .map(|(name, _)| format!("{}.png", name))
+                .unwrap_or_else(|| format!("{}.png", filename));
+            Ok((png_name, compress_svg(input, quality.png)?))
+        }
+        "webp" => {
+            let output_name = if filename
+                .to_lowercase()
+                .ends_with("-lossless.webp")
+            {
+                filename.to_string()
+            } else {
+                let stem = filename.rsplit_once('.').map(|(s, _)| s).unwrap_or(filename);
+                format!("{}.jpg", stem)
+            };
+            Ok((output_name, compress_webp(input, quality, png_lossless)?))
+        }
+        _ => Err(CompressError::UnsupportedFormat(ext.to_string())),
+    }
+}
+
+/// 将文件名后缀改为指定扩展名。
+fn change_extension(filename: &str, new_ext: &str) -> String {
+    let stem = filename.rsplit_once('.').map(|(s, _)| s).unwrap_or(filename);
+    format!("{}.{}", stem, new_ext)
+}
+
 pub fn compress_images(
     input_paths: &[PathBuf],
     output_dir: &Path,
     quality: &super::config::Quality,
     png_lossless: bool,
+    output_format: OutputFormat,
+    max_width: Option<u32>,
+    max_height: Option<u32>,
+    strip_metadata: bool,
 ) -> Vec<Result<CompressResult, CompressError>> {
     use rayon::prelude::*;
 
     input_paths
         .par_iter()
-        .map(|path| compress_image(path, output_dir, quality, png_lossless))
+        .map(|path| compress_image(path, output_dir, quality, png_lossless, output_format, max_width, max_height, strip_metadata))
         .collect()
 }
 
@@ -392,7 +556,7 @@ mod tests {
         std::fs::write(&input, b"test").unwrap();
 
         let quality = super::super::config::Quality::default();
-        let result = compress_image(&input, &dir, &quality, false);
+        let result = compress_image(&input, &dir, &quality, false, OutputFormat::Original, None, None, false);
         assert!(result.is_err());
     }
 }

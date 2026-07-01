@@ -1,6 +1,6 @@
-use iced::widget::{button, checkbox, column, container, row, slider, text};
+use iced::widget::{button, checkbox, column, container, row, scrollable, slider, text};
 use iced::{Element, Length};
-use imagemin_core::{Config, OutputMode};
+use imagemin_core::{Config, OutputMode, ThemeMode};
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -8,6 +8,7 @@ pub enum Message {
     PngChanged(u8),
     PngLosslessChanged(bool),
     OutputModeChanged(OutputMode),
+    ThemeChanged(ThemeMode),
     SelectCustomOutputDir,
     CustomOutputDirSelected(std::path::PathBuf),
 }
@@ -27,6 +28,13 @@ pub fn view(config: &Config) -> Element<'static, Message> {
 
     let png_lossless = checkbox("PNG 纯无损优化（不启用有损量化）", config.png_lossless)
         .on_toggle(Message::PngLosslessChanged);
+
+    let theme_buttons = row![
+        theme_button("跟随系统", ThemeMode::System, config.theme),
+        theme_button("浅色", ThemeMode::Light, config.theme),
+        theme_button("深色", ThemeMode::Dark, config.theme),
+    ]
+    .spacing(8);
 
     let mode_buttons = row![
         mode_button("时间戳子目录", OutputMode::Timestamped, config.output_mode),
@@ -48,6 +56,9 @@ pub fn view(config: &Config) -> Element<'static, Message> {
 
     let version = env!("CARGO_PKG_VERSION");
     let content = column![
+        text("主题").size(18),
+        theme_buttons,
+        text(""),
         text("压缩质量").size(18),
         jpeg_slider,
         png_slider,
@@ -65,11 +76,10 @@ pub fn view(config: &Config) -> Element<'static, Message> {
     .spacing(16)
     .padding(20);
 
-    container(content)
+    container(scrollable(content))
         .width(Length::Fill)
         .height(Length::Fill)
         .center_x()
-        .center_y()
         .into()
 }
 
@@ -77,8 +87,18 @@ fn mode_button(label: &'static str, mode: OutputMode, current: OutputMode) -> El
     let active = mode == current;
     let btn = button(text(label));
     if active {
-        btn.into()
+        btn.style(iced::theme::Button::Primary).into()
     } else {
         btn.on_press(Message::OutputModeChanged(mode)).into()
+    }
+}
+
+fn theme_button(label: &'static str, mode: ThemeMode, current: ThemeMode) -> Element<'static, Message> {
+    let active = mode == current;
+    let btn = button(text(label));
+    if active {
+        btn.style(iced::theme::Button::Primary).into()
+    } else {
+        btn.on_press(Message::ThemeChanged(mode)).into()
     }
 }

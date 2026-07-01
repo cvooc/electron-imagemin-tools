@@ -1,4 +1,4 @@
-use imagemin_core::{compress_image, Config, OutputMode, Quality};
+use imagemin_core::{compress_image, Config, OutputFormat, OutputMode, Quality};
 use std::path::PathBuf;
 use tempfile::TempDir;
 
@@ -66,7 +66,7 @@ fn test_compress_jpeg_basic() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, false).unwrap();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
 
     assert_eq!(result.name, "test.jpg");
     assert!(result.original_size > 0);
@@ -83,7 +83,7 @@ fn test_compress_jpeg_low_quality() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality { jpeg: 10, png: 80 };
-    let result = compress_image(&input_path, &output_dir, &quality, false).unwrap();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
 
     assert!(result.compressed_size < result.original_size);
 }
@@ -96,7 +96,7 @@ fn test_compress_jpeg_high_quality() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality { jpeg: 95, png: 80 };
-    let result = compress_image(&input_path, &output_dir, &quality, false);
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false);
     assert!(result.is_ok());
     assert!(result.unwrap().compressed_size > 0);
 }
@@ -109,7 +109,7 @@ fn test_compress_png_basic() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, false).unwrap();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
 
     assert_eq!(result.name, "test.png");
     assert!(result.original_size > 0);
@@ -125,7 +125,7 @@ fn test_compress_png_lossless() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, true).unwrap();
+    let result = compress_image(&input_path, &output_dir, &quality, true, OutputFormat::Original, None, None, false).unwrap();
 
     assert!(result.compressed_size > 0);
     assert!(result.output_path.exists());
@@ -139,7 +139,7 @@ fn test_compress_png_grayscale() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, false).unwrap();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
 
     assert!(result.compressed_size > 0);
 }
@@ -152,7 +152,7 @@ fn test_compress_png_transparent() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, false).unwrap();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
 
     assert!(result.compressed_size > 0);
 }
@@ -165,7 +165,7 @@ fn test_compress_gif() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, false).unwrap();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
 
     assert_eq!(result.name, "test.gif");
     assert!(result.compressed_size > 0);
@@ -180,7 +180,7 @@ fn test_compress_svg() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, false).unwrap();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
 
     // SVG 被光栅化为 PNG，输出文件名应变更为 .png
     assert_eq!(result.name, "test.png");
@@ -198,7 +198,7 @@ fn test_compress_large_image() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality { jpeg: 50, png: 50 };
-    let result = compress_image(&input_path, &output_dir, &quality, false);
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false);
 
     assert!(result.is_ok(), "Compression should succeed: {:?}", result.err());
     let result = result.unwrap();
@@ -214,7 +214,7 @@ fn test_compress_small_image() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, false).unwrap();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
 
     assert!(result.compressed_size > 0);
 }
@@ -227,7 +227,7 @@ fn test_compress_unsupported_bmp() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, false);
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false);
 
     assert!(result.is_err());
 }
@@ -240,7 +240,7 @@ fn test_compress_unsupported_webp() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, false);
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false);
 
     assert!(result.is_err());
 }
@@ -252,7 +252,7 @@ fn test_compress_nonexistent_file() {
     let output_dir = temp.path().join("output");
 
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, false);
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false);
 
     assert!(result.is_err());
 }
@@ -265,7 +265,7 @@ fn test_compress_empty_file() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, false);
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false);
 
     assert!(result.is_err());
 }
@@ -278,7 +278,7 @@ fn test_compress_corrupted_jpeg() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, false);
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false);
 
     assert!(result.is_err());
 }
@@ -297,9 +297,9 @@ fn test_compress_quality_comparison() {
     let out_mid = temp.path().join("mid");
     let out_high = temp.path().join("high");
 
-    let r_low = compress_image(&input_path, &out_low, &quality_low, false).unwrap();
-    let r_mid = compress_image(&input_path, &out_mid, &quality_mid, false).unwrap();
-    let r_high = compress_image(&input_path, &out_high, &quality_high, false).unwrap();
+    let r_low = compress_image(&input_path, &out_low, &quality_low, false, OutputFormat::Original, None, None, false).unwrap();
+    let r_mid = compress_image(&input_path, &out_mid, &quality_mid, false, OutputFormat::Original, None, None, false).unwrap();
+    let r_high = compress_image(&input_path, &out_high, &quality_high, false, OutputFormat::Original, None, None, false).unwrap();
 
     assert!(r_low.compressed_size <= r_mid.compressed_size);
     assert!(r_mid.compressed_size <= r_high.compressed_size);
@@ -313,7 +313,7 @@ fn test_compress_output_filename_preserved() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, false).unwrap();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
 
     assert_eq!(result.name, "my_photo_2024.jpg");
     assert!(result.output_path.ends_with("my_photo_2024.jpg"));
@@ -327,7 +327,7 @@ fn test_compress_chinese_filename() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, false).unwrap();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
 
     assert_eq!(result.name, "测试图片.jpg");
     assert!(result.output_path.exists());
@@ -350,6 +350,7 @@ fn test_config_serialization_roundtrip() {
         output_mode: OutputMode::SameDir,
         custom_output_dir: Some(PathBuf::from("/tmp/out")),
         png_lossless: true,
+        ..Default::default()
     };
 
     let toml_str = toml::to_string(&config).unwrap();
@@ -433,6 +434,7 @@ fn test_config_save_and_load() {
         output_mode: OutputMode::Custom,
         custom_output_dir: Some(PathBuf::from("D:\\custom_output")),
         png_lossless: true,
+        ..Default::default()
     };
 
     std::fs::write(&config_path, toml::to_string_pretty(&config).unwrap()).unwrap();
@@ -456,7 +458,7 @@ fn test_compress_jpg_extension() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, false);
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false);
     assert!(result.is_ok());
 }
 
@@ -468,7 +470,7 @@ fn test_compress_jpeg_extension() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, false);
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false);
     assert!(result.is_ok());
 }
 
@@ -480,7 +482,7 @@ fn test_compress_uppercase_extension() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, false);
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false);
     assert!(result.is_ok());
 }
 
@@ -492,7 +494,7 @@ fn test_compress_mixed_case_extension() {
 
     let output_dir = temp.path().join("output");
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, false);
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false);
     assert!(result.is_ok());
 }
 
@@ -509,9 +511,9 @@ fn test_batch_compress_multiple_files() {
     let output_dir = temp.path().join("output");
     let quality = Quality::default();
 
-    let r1 = compress_image(&temp.path().join("1.jpg"), &output_dir, &quality, false).unwrap();
-    let r2 = compress_image(&temp.path().join("2.png"), &output_dir, &quality, false).unwrap();
-    let r3 = compress_image(&temp.path().join("3.gif"), &output_dir, &quality, false).unwrap();
+    let r1 = compress_image(&temp.path().join("1.jpg"), &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
+    let r2 = compress_image(&temp.path().join("2.png"), &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
+    let r3 = compress_image(&temp.path().join("3.gif"), &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
 
     assert!(r1.compressed_size > 0);
     assert!(r2.compressed_size > 0);
@@ -524,7 +526,7 @@ fn test_compress_to_same_directory() {
     create_test_jpeg(&temp.path().join("test.jpg"));
 
     let quality = Quality::default();
-    let result = compress_image(&temp.path().join("test.jpg"), temp.path(), &quality, false).unwrap();
+    let result = compress_image(&temp.path().join("test.jpg"), temp.path(), &quality, false, OutputFormat::Original, None, None, false).unwrap();
 
     assert!(result.output_path.exists());
 }
@@ -545,7 +547,7 @@ fn test_output_mode_same_dir_creates_file_in_input_dir() {
     assert_eq!(output_dir, temp.path());
 
     let quality = Quality::default();
-    let result = compress_image(&input_path, &output_dir, &quality, false).unwrap();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
     assert!(result.output_path.exists());
     assert_eq!(result.output_path.parent().unwrap(), temp.path());
 }

@@ -7,6 +7,10 @@ pub struct Row {
     pub original_size: u64,
     pub compressed_size: u64,
     pub status: Result<(), String>,
+    /// 输入文件路径（用于预览）
+    pub input_path: Option<std::path::PathBuf>,
+    /// 输出文件路径（用于预览）
+    pub output_path: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -14,6 +18,8 @@ pub enum Message {
     OpenOutputDir,
     RetryCompress,
     ClearResults,
+    /// 在系统图片查看器中预览原图和压缩后的图
+    Preview(usize),
 }
 
 fn format_size(bytes: u64) -> String {
@@ -53,7 +59,7 @@ pub fn view(results: &[Row], has_output_dir: bool) -> Element<'static, Message> 
     let mut success_count = 0;
     let mut fail_count = 0;
 
-    for result in results {
+    for (i, result) in results.iter().enumerate() {
         let status_text = match &result.status {
             Ok(()) => {
                 total_original += result.original_size;
@@ -74,6 +80,8 @@ pub fn view(results: &[Row], has_output_dir: bool) -> Element<'static, Message> 
             "-".to_string()
         };
 
+        let can_preview = result.input_path.is_some() || result.output_path.is_some();
+
         let row = row![
             text(&result.name).width(Length::FillPortion(3)),
             text(format_size(result.original_size)).width(Length::FillPortion(1)),
@@ -83,15 +91,27 @@ pub fn view(results: &[Row], has_output_dir: bool) -> Element<'static, Message> 
         ]
         .padding(4);
 
+        let row = if can_preview {
+            row.push(button(text("预览").size(12)).on_press(Message::Preview(i)))
+        } else {
+            row
+        };
+
         rows = rows.push(row);
     }
 
     let total_savings = total_original as i64 - total_compressed as i64;
+    let ratio = if total_original > 0 {
+        format!(" ({:.0}%)", (total_savings as f64 / total_original as f64 * 100.0))
+    } else {
+        String::new()
+    };
     let summary = text(format!(
-        "成功 {} / 失败 {} / 共节省 {}",
+        "成功 {} / 失败 {} / 共节省 {}{}",
         success_count,
         fail_count,
-        format_savings(total_savings)
+        format_savings(total_savings),
+        ratio,
     ));
 
     let mut footer = row![horizontal_space(), summary].spacing(16).padding(12);

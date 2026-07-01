@@ -22,8 +22,9 @@ embed-resource = "2"
 
 [dependencies]
 imagemin-core = { path = "../core" }
-iced = { version = "0.12", features = ["tokio", "image", "system"] }
+iced = { version = "0.12", features = ["tokio", "image", "advanced", "system"] }
 rfd = "0.15"
 tokio = { version = "1", features = ["full"] }
 open = "5"
 chrono = "0.4"
+dark-light = "1"

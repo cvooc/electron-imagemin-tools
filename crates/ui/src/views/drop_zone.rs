@@ -19,9 +19,15 @@ fn drop_zone_style(_theme: &Theme) -> container::Appearance {
     }
 }
 
-pub fn view() -> Element<'static, Message> {
+pub fn view(file_count: usize) -> Element<'static, Message> {
+    let hint = if file_count > 0 {
+        format!("已选择 {} 个文件", file_count)
+    } else {
+        String::from("点击选择图片 / 拖放图片或文件夹")
+    };
+
     let content = column![
-        text("点击选择图片 / 拖放图片").size(20),
+        text(hint).size(20),
         text("支持格式：JPG/PNG/GIF/SVG/WebP").size(14),
     ]
     .spacing(12);

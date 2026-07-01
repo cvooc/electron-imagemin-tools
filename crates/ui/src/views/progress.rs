@@ -8,7 +8,7 @@ fn progress_style(_theme: &Theme) -> container::Appearance {
     }
 }
 
-pub fn view(current: usize, total: usize) -> Element<'static, ()> {
+pub fn view(current: usize, total: usize, current_file: &str) -> Element<'static, ()> {
     let progress = if total > 0 {
         current as f32 / total as f32
     } else {
@@ -17,8 +17,9 @@ pub fn view(current: usize, total: usize) -> Element<'static, ()> {
 
     let content = column![
         text("正在压缩...").size(24),
+        text(current_file).size(14),
         text(format!("{}/{}", current, total)).size(16),
-        progress_bar(0.0..=1.0, progress).width(Length::Fixed(300.0)),
+        progress_bar(0.0..=1.0, progress).width(Length::Fill),
     ]
     .spacing(20);
 
