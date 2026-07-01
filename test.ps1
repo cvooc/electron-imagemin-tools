@@ -6,7 +6,22 @@ $ErrorActionPreference = "Stop"
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $scriptPath
 
-$env:PATH = "C:\Users\liule\AppData\Local\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin;" + $env:PATH
+# 确保 NASM 在 PATH 中（ravif/rav1e 需要），尝试常见安装路径
+if (-not (Get-Command "nasm" -ErrorAction SilentlyContinue)) {
+    $nasmPaths = @(
+        "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\*\*\mingw64\bin",
+        "C:\Program Files\NASM",
+        "$env:ProgramFiles\NASM",
+        "${env:ProgramFiles(x86)}\NASM"
+    )
+    foreach ($p in $nasmPaths) {
+        $resolved = Resolve-Path "$p\nasm.exe" -ErrorAction SilentlyContinue
+        if ($resolved) {
+            $env:PATH = "$(Split-Path $resolved);$env:PATH"
+            break
+        }
+    }
+}
 
 Write-Host "==================== Running Unit Tests ====================" -ForegroundColor Cyan
 cargo test -p imagemin-core --lib

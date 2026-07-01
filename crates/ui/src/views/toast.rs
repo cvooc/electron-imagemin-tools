@@ -3,10 +3,8 @@ use iced::{Color, Element};
 
 /// Toast 类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
 pub enum ToastKind {
     Success,
-    Error,
     Info,
 }
 
@@ -25,14 +23,6 @@ impl Toast {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn error(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-            kind: ToastKind::Error,
-        }
-    }
-
     pub fn info(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
@@ -44,7 +34,6 @@ impl Toast {
 fn toast_bg(kind: ToastKind) -> Color {
     match kind {
         ToastKind::Success => Color::from_rgb(0.2, 0.7, 0.3),
-        ToastKind::Error => Color::from_rgb(0.9, 0.2, 0.2),
         ToastKind::Info => Color::from_rgb(0.2, 0.5, 0.8),
     }
 }

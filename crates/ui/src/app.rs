@@ -1,6 +1,8 @@
 use iced::widget::{column, container};
 use iced::{window, Application, Command, Element, Length, Subscription, Theme};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use crate::views::{drop_zone, header, history, modal, progress, result_table, settings, stack, toast};
 use imagemin_core::{Config, History, HistoryEntry, OutputMode, ThemeMode};
@@ -26,6 +28,8 @@ pub struct App {
     show_clear_modal: bool,
     /// 压缩历史记录
     history: History,
+    /// 取消压缩标志
+    cancel_flag: Option<Arc<AtomicBool>>,
 }
 
 #[derive(Debug, Clone)]
@@ -47,6 +51,8 @@ pub enum Message {
     /// Modal 确认清空
     ConfirmClear,
     CancelClear,
+    /// 取消压缩
+    CancelCompression,
 }
 
 impl Application for App {
@@ -56,7 +62,12 @@ impl Application for App {
     type Flags = ();
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
-        let config = Config::load();
+        let (config, config_err) = Config::load();
+
+        let mut toast = None;
+        if let Some(err) = config_err {
+            toast = Some(toast::Toast::info(err));
+        }
 
         (
             Self {
@@ -66,9 +77,10 @@ impl Application for App {
                 hovered_file: None,
                 output_dir: None,
                 results: Vec::new(),
-                toast: None,
+                toast,
                 show_clear_modal: false,
                 history: History::load(),
+                cancel_flag: None,
             },
             Command::none(),
         )
@@ -213,6 +225,10 @@ impl Application for App {
                 }
 
                 let completed = self.results.len();
+                // 如果取消了压缩，忽略后续进度消息
+                if self.cancel_flag.is_none() {
+                    return Command::none();
+                }
                 if completed < total {
                     self.state = AppState::Compressing { completed, total };
                     Command::none()
@@ -253,6 +269,15 @@ impl Application for App {
                     }
                     Command::none()
                 }
+            }
+            Message::CancelCompression => {
+                if let Some(flag) = &self.cancel_flag {
+                    flag.store(true, Ordering::Relaxed);
+                }
+                self.cancel_flag = None;
+                self.state = AppState::Idle;
+                self.toast = Some(toast::Toast::info("压缩已取消"));
+                Command::none()
             }
             Message::History(history::Message::Back) => {
                 self.state = AppState::Idle;
@@ -394,7 +419,6 @@ impl Application for App {
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_else(|| "…".to_string());
                 progress::view(*completed, *total, &current_file)
-                    .map(|_| Message::DropZone(drop_zone::Message::SelectFiles))
             }
             AppState::Completed => result_table::view(&self.results, self.output_dir.is_some())
                 .map(Message::ResultTable),
@@ -450,6 +474,8 @@ impl App {
         }
 
         self.state = AppState::Compressing { completed: 0, total };
+        let cancel_flag = Arc::new(AtomicBool::new(false));
+        self.cancel_flag = Some(cancel_flag.clone());
 
         // 并行发起所有压缩任务
         let cmds: Vec<Command<Message>> = self
@@ -459,8 +485,9 @@ impl App {
             .map(|(i, path)| {
                 let path = path.clone();
                 let config = self.config.clone();
+                let flag = cancel_flag.clone();
                 Command::perform(
-                    compress_single(i, total, path, config),
+                    compress_single(i, total, path, config, flag),
                     move |(idx, tot, row, out)| Message::CompressProgress(idx, tot, row, out),
                 )
             })
@@ -531,7 +558,13 @@ async fn compress_single(
     total: usize,
     path: PathBuf,
     config: Config,
+    cancel_flag: Arc<AtomicBool>,
 ) -> (usize, usize, Option<result_table::Row>, Option<PathBuf>) {
+    // 快速检查取消标志
+    if cancel_flag.load(Ordering::Relaxed) {
+        return (index, total, None, None);
+    }
+
     let fallback_name = path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -539,6 +572,14 @@ async fn compress_single(
     let panic_name = fallback_name.clone();
 
     let result = tokio::task::spawn_blocking(move || {
+        // 检查是否已被取消
+        if cancel_flag.load(Ordering::Relaxed) {
+            return (
+                None,
+                None,
+            );
+        }
+
         let output_dir = resolve_output_dir(&config, &path);
 
         if let Err(e) = std::fs::create_dir_all(&output_dir) {

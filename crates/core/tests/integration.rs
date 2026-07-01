@@ -1,4 +1,4 @@
-use imagemin_core::{compress_image, Config, OutputFormat, OutputMode, Quality};
+use imagemin_core::{compress_image, Config, History, HistoryEntry, OutputFormat, OutputMode, Quality};
 use std::path::PathBuf;
 use tempfile::TempDir;
 
@@ -550,4 +550,149 @@ fn test_output_mode_same_dir_creates_file_in_input_dir() {
     let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
     assert!(result.output_path.exists());
     assert_eq!(result.output_path.parent().unwrap(), temp.path());
+}
+
+// ==================== AVIF 输出测试 ====================
+
+#[test]
+#[ignore = "rav1e 0.6.3 panics on small dimensions; upgrade rav1e to fix"]
+fn test_compress_to_avif() {
+    let temp = TempDir::new().unwrap();
+    let input_path = temp.path().join("test.png");
+    create_test_png(&input_path);
+
+    let output_dir = temp.path().join("output");
+    let quality = Quality::default();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Avif, None, None, false).unwrap();
+
+    assert_eq!(result.name, "test.avif");
+    assert!(result.compressed_size > 0);
+    assert!(result.output_path.exists());
+    assert_eq!(result.output_path.extension().unwrap(), "avif");
+}
+
+// ==================== WebP 输出测试 ====================
+
+#[test]
+fn test_compress_to_webp() {
+    let temp = TempDir::new().unwrap();
+    let input_path = temp.path().join("test.png");
+    create_test_png(&input_path);
+
+    let output_dir = temp.path().join("output");
+    let quality = Quality::default();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::WebP, None, None, false).unwrap();
+
+    assert_eq!(result.name, "test.webp");
+    assert!(result.compressed_size > 0);
+    assert!(result.output_path.exists());
+    assert_eq!(result.output_path.extension().unwrap(), "webp");
+}
+
+// ==================== 格式转换测试 ====================
+
+#[test]
+fn test_convert_png_to_jpeg() {
+    let temp = TempDir::new().unwrap();
+    let input_path = temp.path().join("test.png");
+    create_test_png(&input_path);
+
+    let output_dir = temp.path().join("output");
+    let quality = Quality::default();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Jpeg, None, None, false).unwrap();
+
+    assert_eq!(result.name, "test.jpg");
+    assert!(result.compressed_size > 0);
+    assert_eq!(result.output_path.extension().unwrap(), "jpg");
+}
+
+#[test]
+fn test_convert_jpeg_to_png() {
+    let temp = TempDir::new().unwrap();
+    let input_path = temp.path().join("test.jpg");
+    create_test_jpeg(&input_path);
+
+    let output_dir = temp.path().join("output");
+    let quality = Quality::default();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Png, None, None, false).unwrap();
+
+    assert_eq!(result.name, "test.png");
+    assert!(result.compressed_size > 0);
+    assert_eq!(result.output_path.extension().unwrap(), "png");
+}
+
+// ==================== 图片尺寸调整测试 ====================
+
+#[test]
+fn test_resize_to_max_dimensions() {
+    let temp = TempDir::new().unwrap();
+    let input_path = temp.path().join("test.jpg");
+    create_test_jpeg(&input_path);
+
+    let output_dir = temp.path().join("output");
+    let quality = Quality::default();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, Some(50), Some(50), false).unwrap();
+
+    assert!(result.compressed_size > 0);
+    assert!(result.output_path.exists());
+}
+
+// ==================== 元数据剥离测试 ====================
+
+#[test]
+fn test_strip_metadata_from_png() {
+    let temp = TempDir::new().unwrap();
+    let input_path = temp.path().join("test.png");
+    create_test_png(&input_path);
+
+    let output_dir = temp.path().join("output");
+    let quality = Quality::default();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, true).unwrap();
+
+    assert!(result.compressed_size > 0);
+    assert!(result.output_path.exists());
+}
+
+// ==================== 历史记录序列化测试 ====================
+
+#[test]
+fn test_history_serialization_roundtrip() {
+    let mut history = History::default();
+    let entry = HistoryEntry {
+        timestamp_ms: 1000,
+        timestamp_str: "2026-01-01 00:00:00".to_string(),
+        results: vec![],
+        output_dir: std::path::PathBuf::from("/tmp/out"),
+        total_original: 10000,
+        total_compressed: 5000,
+    };
+    history.add(entry);
+
+    let json_str = serde_json::to_string_pretty(&history).unwrap();
+    let loaded: History = serde_json::from_str(&json_str).unwrap();
+
+    assert_eq!(loaded.entries.len(), 1);
+    assert_eq!(loaded.entries[0].total_original, 10000);
+    assert_eq!(loaded.entries[0].total_compressed, 5000);
+    assert_eq!(loaded.entries[0].savings(), 5000);
+}
+
+#[test]
+fn test_history_max_entries() {
+    let mut history = History::default();
+    for i in 0..120 {
+        let entry = HistoryEntry {
+            timestamp_ms: i,
+            timestamp_str: format!("entry-{}", i),
+            results: vec![],
+            output_dir: std::path::PathBuf::from("/tmp"),
+            total_original: 100,
+            total_compressed: 50,
+        };
+        history.add(entry);
+    }
+    // 最多保留 100 条
+    assert_eq!(history.entries.len(), 100);
+    assert_eq!(history.entries[0].timestamp_ms, 20);
+    assert_eq!(history.entries[99].timestamp_ms, 119);
 }

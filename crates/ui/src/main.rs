@@ -5,6 +5,7 @@ use std::borrow::Cow;
 use std::path::PathBuf;
 
 mod app;
+mod util;
 mod views;
 
 /// 尝试从常见系统路径加载中文字体。

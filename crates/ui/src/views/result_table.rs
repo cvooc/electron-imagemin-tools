@@ -1,6 +1,8 @@
 use iced::widget::{button, column, horizontal_space, row, text};
 use iced::{Element, Length};
 
+use crate::util::{format_savings, format_size};
+
 #[derive(Debug, Clone)]
 pub struct Row {
     pub name: String,
@@ -20,26 +22,6 @@ pub enum Message {
     ClearResults,
     /// 在系统图片查看器中预览原图和压缩后的图
     Preview(usize),
-}
-
-fn format_size(bytes: u64) -> String {
-    if bytes < 1024 {
-        format!("{} B", bytes)
-    } else if bytes < 1024 * 1024 {
-        format!("{:.1} KB", bytes as f64 / 1024.0)
-    } else {
-        format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
-    }
-}
-
-fn format_savings(bytes: i64) -> String {
-    if bytes.abs() < 1024 {
-        format!("{} B", bytes)
-    } else if bytes.abs() < 1024 * 1024 {
-        format!("{:.1} KB", bytes as f64 / 1024.0)
-    } else {
-        format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
-    }
 }
 
 pub fn view(results: &[Row], has_output_dir: bool) -> Element<'static, Message> {

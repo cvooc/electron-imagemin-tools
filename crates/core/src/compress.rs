@@ -171,7 +171,7 @@ fn compress_png(input: &[u8], quality: u8, lossless: bool) -> Result<Vec<u8>, Co
 }
 
 /// 压缩 GIF：单帧 GIF 通过 imagequant 减少调色板；多帧动画 GIF 保留原样。
-fn compress_gif(input: &[u8], _quality: u8) -> Result<Vec<u8>, CompressError> {
+fn compress_gif(input: &[u8], quality: u8) -> Result<Vec<u8>, CompressError> {
     let mut decoder = gif::DecodeOptions::new();
     decoder.set_color_output(gif::ColorOutput::RGBA);
     let mut decoder = decoder
@@ -204,7 +204,7 @@ fn compress_gif(input: &[u8], _quality: u8) -> Result<Vec<u8>, CompressError> {
         .collect();
 
     let mut liq = imagequant::new();
-    let _ = liq.set_quality(0, 80); // GIF 使用固定质量 80
+    let _ = liq.set_quality(0, quality);
 
     let mut img = liq
         .new_image(raw_data, width as usize, height as usize, 0.0)
@@ -250,7 +250,7 @@ fn compress_gif(input: &[u8], _quality: u8) -> Result<Vec<u8>, CompressError> {
 }
 
 /// 将 SVG 光栅化为 PNG 后压缩。输出格式从 .svg 变为 .png。
-fn compress_svg(input: &[u8], _quality: u8) -> Result<Vec<u8>, CompressError> {
+fn compress_svg(input: &[u8], quality: u8) -> Result<Vec<u8>, CompressError> {
     let svg_str = std::str::from_utf8(input)
         .map_err(|e| CompressError::Image(format!("SVG 不是合法 UTF-8: {}", e)))?;
 
@@ -273,7 +273,7 @@ fn compress_svg(input: &[u8], _quality: u8) -> Result<Vec<u8>, CompressError> {
     .ok_or_else(|| CompressError::Image("SVG 渲染结果尺寸不匹配".to_string()))?;
 
     // 用 oxipng 无损优化光栅化后的 PNG。
-    quantize_to_indexed_png(&rgba, 80)
+    quantize_to_indexed_png(&rgba, quality)
 }
 
 /// 解码 WebP 后按是否有透明通道分别输出为 PNG 或 JPEG。
@@ -324,6 +324,32 @@ fn strip_metadata_from_png(data: &[u8]) -> Result<Vec<u8>, CompressError> {
     };
     oxipng::optimize_from_memory(data, &opts)
         .map_err(|e| CompressError::Image(e.to_string()))
+}
+
+/// 将 RGB 数据编码为 WebP。
+fn compress_webp_encoder_rgb(
+    rgb: &image::RgbImage,
+    quality: u8,
+) -> Result<Vec<u8>, CompressError> {
+    use webp::Encoder;
+
+    let (width, height) = rgb.dimensions();
+    let encoder = Encoder::from_rgb(rgb.as_raw(), width, height);
+    let encoded = encoder.encode(quality as f32);
+    Ok(encoded.to_vec())
+}
+
+/// 将 RGBA 数据编码为 WebP（带透明通道）。
+fn compress_webp_encoder_rgba(
+    rgba: &image::RgbaImage,
+    quality: u8,
+) -> Result<Vec<u8>, CompressError> {
+    use webp::Encoder;
+
+    let (width, height) = rgba.dimensions();
+    let encoder = Encoder::from_rgba(rgba.as_raw(), width, height);
+    let encoded = encoder.encode(quality as f32);
+    Ok(encoded.to_vec())
 }
 
 /// 将 RGBA 数据编码为 AVIF。
@@ -440,13 +466,16 @@ pub fn compress_image(
             (new_name, data)
         }
         OutputFormat::WebP => {
-            // WebP 编码暂未实现，转为 PNG
-            let new_name = change_extension(&filename, "png");
+            let new_name = change_extension(&filename, "webp");
             let img = image::load_from_memory(&input)
                 .map_err(|e| CompressError::Image(e.to_string()))?;
             let img = resize_if_needed(img, max_width, max_height);
-            let rgba = img.to_rgba8();
-            (new_name, compress_png_raw(&rgba, quality.png)?)
+            let data = if img.color().has_alpha() {
+                compress_webp_encoder_rgba(&img.to_rgba8(), quality.jpeg)?
+            } else {
+                compress_webp_encoder_rgb(&img.to_rgb8(), quality.jpeg)?
+            };
+            (new_name, data)
         }
         OutputFormat::Avif => {
             let new_name = change_extension(&filename, "avif");

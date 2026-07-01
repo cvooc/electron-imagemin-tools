@@ -2,22 +2,14 @@ use iced::widget::{button, column, container, row, scrollable, text};
 use iced::{Element, Length};
 use imagemin_core::HistoryEntry;
 
+use crate::util::format_size;
+
 #[derive(Debug, Clone)]
 pub enum Message {
     /// 返回主界面
     Back,
     /// 打开某条历史记录的输出目录
     OpenDir(std::path::PathBuf),
-}
-
-fn format_size(bytes: u64) -> String {
-    if bytes < 1024 {
-        format!("{} B", bytes)
-    } else if bytes < 1024 * 1024 {
-        format!("{:.1} KB", bytes as f64 / 1024.0)
-    } else {
-        format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
-    }
 }
 
 pub fn view(entries: &[HistoryEntry]) -> Element<'static, Message> {

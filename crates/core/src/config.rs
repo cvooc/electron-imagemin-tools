@@ -184,17 +184,28 @@ impl Config {
         }
     }
 
-    pub fn load() -> Self {
+    /// 加载配置。返回 (config, 可选的错误信息) — 配置文件损坏时会回退到默认值并返回错误描述。
+    pub fn load() -> (Self, Option<String>) {
         let path = Self::config_path();
         if path.exists() {
             let content = std::fs::read_to_string(&path).unwrap_or_default();
-            let mut config: Self = toml::from_str(&content).unwrap_or_default();
-            config.quality.clamp();
-            config
+            let parse_result: Result<Self, toml::de::Error> = toml::from_str(&content);
+            match parse_result {
+                Ok(mut config) => {
+                    config.quality.clamp();
+                    (config, None)
+                }
+                Err(e) => {
+                    let err_msg = format!("配置文件解析失败，已回退到默认值: {}", e);
+                    let config = Self::default();
+                    let _ = config.save();
+                    (config, Some(err_msg))
+                }
+            }
         } else {
             let config = Self::default();
             let _ = config.save();
-            config
+            (config, None)
         }
     }
 

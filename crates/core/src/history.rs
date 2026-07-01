@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// 单次压缩历史记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,46 +28,6 @@ pub struct HistoryResult {
 }
 
 impl HistoryEntry {
-    pub fn from_compress_results(
-        results: &[crate::CompressResult],
-        output_dir: Option<PathBuf>,
-    ) -> Self {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default();
-        let timestamp_ms = now.as_millis() as u64;
-        let timestamp_str = chrono::Local::now()
-            .format("%Y-%m-%d %H:%M:%S")
-            .to_string();
-
-        let mut total_original = 0u64;
-        let mut total_compressed = 0u64;
-
-        let history_results: Vec<HistoryResult> = results
-            .iter()
-            .map(|r| {
-                total_original += r.original_size;
-                total_compressed += r.compressed_size;
-                HistoryResult {
-                    name: r.name.clone(),
-                    original_size: r.original_size,
-                    compressed_size: r.compressed_size,
-                    success: r.compressed_size > 0 || r.original_size == 0,
-                }
-            })
-            .collect();
-
-        HistoryEntry {
-            timestamp_ms,
-            timestamp_str,
-            results: history_results,
-            output_dir: output_dir.unwrap_or_default(),
-            total_original,
-            total_compressed,
-        }
-    }
-
-    /// 节省的字节数
     pub fn savings(&self) -> i64 {
         self.total_original as i64 - self.total_compressed as i64
     }

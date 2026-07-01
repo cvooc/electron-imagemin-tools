@@ -1,5 +1,7 @@
-use iced::widget::{column, container, progress_bar, text};
+use iced::widget::{button, column, container, progress_bar, text};
 use iced::{Element, Length, Theme};
+
+use crate::app::Message;
 
 fn progress_style(_theme: &Theme) -> container::Appearance {
     container::Appearance {
@@ -8,7 +10,7 @@ fn progress_style(_theme: &Theme) -> container::Appearance {
     }
 }
 
-pub fn view(current: usize, total: usize, current_file: &str) -> Element<'static, ()> {
+pub fn view(current: usize, total: usize, current_file: &str) -> Element<'static, Message> {
     let progress = if total > 0 {
         current as f32 / total as f32
     } else {
@@ -20,6 +22,9 @@ pub fn view(current: usize, total: usize, current_file: &str) -> Element<'static
         text(current_file).size(14),
         text(format!("{}/{}", current, total)).size(16),
         progress_bar(0.0..=1.0, progress).width(Length::Fill),
+        button(text("取消压缩"))
+            .on_press(Message::CancelCompression)
+            .style(iced::theme::Button::Destructive),
     ]
     .spacing(20);
 
