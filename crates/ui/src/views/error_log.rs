@@ -7,6 +7,7 @@ use crate::app::LogEntry;
 pub enum Message {
     Back,
     CopyLog,
+    ClearLog,
 }
 
 fn log_item_bg(_theme: &iced::Theme) -> container::Appearance {
@@ -39,6 +40,9 @@ pub fn view(logs: &[LogEntry]) -> Element<'static, Message> {
                     .style(Color::from_rgb(0.7, 0.3, 0.3)),
                 button(text("一键复制日志").size(13))
                     .on_press(Message::CopyLog),
+                button(text("清空日志").size(13))
+                    .style(iced::theme::Button::Destructive)
+                    .on_press(Message::ClearLog),
             ]
             .spacing(12),
         );

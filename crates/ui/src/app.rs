@@ -340,6 +340,11 @@ impl Application for App {
                     iced::clipboard::write(log_text)
                 }
             }
+            Message::ErrorLog(error_log::Message::ClearLog) => {
+                self.logs.clear();
+                self.toast = Some(toast::Toast::info("日志已清空"));
+                Command::none()
+            }
             Message::ResultTable(result_table::Message::OpenOutputDir) => {
                 if let Some(dir) = &self.output_dir {
                     open::that(dir).ok();
