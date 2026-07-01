@@ -75,4 +75,5 @@ iced 采用 Elm 架构：
 - 核心错误处理使用 `thiserror` 定义的 `CompressError`。
 - UI 消息使用 iced 的 `Command::perform` 发起异步任务。
 - 注释为中文。
+- Git 提交信息使用中文描述。
 - 发版时需更新 `Cargo.toml` workspace `version`。
