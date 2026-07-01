@@ -5,6 +5,7 @@ use iced::{Element, Length, Theme};
 pub enum Message {
     OpenSettings,
     OpenHistory,
+    OpenErrorLog,
     Minimize,
     Close,
     Drag,
@@ -26,6 +27,7 @@ pub fn view() -> Element<'static, Message> {
         title,
         horizontal_space(),
         button(text("历史").size(14)).on_press(Message::OpenHistory),
+        button(text("日志").size(14)).on_press(Message::OpenErrorLog),
         button(text("设置").size(14)).on_press(Message::OpenSettings),
         button(text("最小化").size(14)).on_press(Message::Minimize),
         button(text("关闭").size(14)).on_press(Message::Close),

@@ -1,4 +1,5 @@
 pub mod drop_zone;
+pub mod error_log;
 pub mod header;
 pub mod history;
 pub mod modal;

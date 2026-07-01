@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use crate::views::{drop_zone, header, history, modal, progress, result_table, settings, stack, toast};
+use crate::views::{drop_zone, error_log, header, history, modal, progress, result_table, settings, stack, toast};
 use imagemin_core::{Config, History, HistoryEntry, OutputMode, ThemeMode};
 
 #[derive(Debug, Clone)]
@@ -14,6 +14,7 @@ pub enum AppState {
     Completed,
     Settings,
     History,
+    ErrorLog,
 }
 
 /// 压缩失败日志条目
@@ -50,6 +51,7 @@ pub enum Message {
     ResultTable(result_table::Message),
     Settings(settings::Message),
     History(history::Message),
+    ErrorLog(error_log::Message),
     FilesSelected(Vec<PathBuf>),
     FileHovered(PathBuf),
     FileDropped(PathBuf),
@@ -168,6 +170,17 @@ impl Application for App {
                     _ => {
                         self.history = History::load();
                         self.state = AppState::History;
+                    }
+                }
+                Command::none()
+            }
+            Message::Header(header::Message::OpenErrorLog) => {
+                match self.state {
+                    AppState::ErrorLog => {
+                        self.state = AppState::Idle;
+                    }
+                    _ => {
+                        self.state = AppState::ErrorLog;
                     }
                 }
                 Command::none()
@@ -308,6 +321,25 @@ impl Application for App {
                 open::that(&dir).ok();
                 Command::none()
             }
+            Message::ErrorLog(error_log::Message::Back) => {
+                self.state = AppState::Idle;
+                Command::none()
+            }
+            Message::ErrorLog(error_log::Message::CopyLog) => {
+                let log_text: String = self
+                    .logs
+                    .iter()
+                    .map(|l| format!("[{}] {} — {}\n  路径: {}", l.timestamp, l.filename, l.error, l.input_path))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if log_text.is_empty() {
+                    self.toast = Some(toast::Toast::info("暂无失败日志"));
+                    Command::none()
+                } else {
+                    self.toast = Some(toast::Toast::success("日志已复制到剪贴板"));
+                    iced::clipboard::write(log_text)
+                }
+            }
             Message::ResultTable(result_table::Message::OpenOutputDir) => {
                 if let Some(dir) = &self.output_dir {
                     open::that(dir).ok();
@@ -390,21 +422,6 @@ impl Application for App {
                 }
                 Command::none()
             }
-            Message::Settings(settings::Message::CopyErrorLog) => {
-                let log_text: String = self
-                    .logs
-                    .iter()
-                    .map(|l| format!("[{}] {} — {}\n  路径: {}", l.timestamp, l.filename, l.error, l.input_path))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                if log_text.is_empty() {
-                    self.toast = Some(toast::Toast::info("暂无失败日志"));
-                    Command::none()
-                } else {
-                    self.toast = Some(toast::Toast::success("日志已复制到剪贴板"));
-                    iced::clipboard::write(log_text)
-                }
-            }
             Message::KeyPressed(key, modifiers) => {
                 use iced::keyboard::Key;
                 let ctrl = modifiers.control();
@@ -458,8 +475,9 @@ impl Application for App {
             }
             AppState::Completed => result_table::view(&self.results, self.output_dir.is_some())
                 .map(Message::ResultTable),
-            AppState::Settings => settings::view(&self.config, &self.logs).map(Message::Settings),
+            AppState::Settings => settings::view(&self.config).map(Message::Settings),
             AppState::History => history::view(&self.history.entries).map(Message::History),
+            AppState::ErrorLog => error_log::view(&self.logs).map(Message::ErrorLog),
         };
 
         let toast_element: Element<'_, Message> = match &self.toast {
