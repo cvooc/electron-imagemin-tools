@@ -48,8 +48,8 @@
 | C25 | Core质量 | `SameDir` 模式在根路径时行为异常 | 🟢 低 | 根路径 `/` 和 `\\` 时回退到 base_output_dir | | 是 |
 | C26 | Core质量 | `CompressResult` 缺少校验和 | 🟢 低 | 已添加 `checksum` (CRC32) 字段 | | 是 |
 | C27 | Core质量 | 格式列表多处重复维护 | 🟡 中 | 已定义 `SUPPORTED_EXTENSIONS` 全局常量统一引用 | | 是 |
-| C28 | Core质量 | `compress_original()` 与 `compress_image()` 的格式分发逻辑重复 | 🟡 中 | 两者都根据格式选择压缩方法，但结构不统一。建议将 format→compressor 映射抽象为统一入口 | | |
-| C29 | Core质量 | JPEG/PNG quality 语义不一致 | 🟢 低 | JPEG quality 映射编码器质量，PNG quality 映射 imagequant 质量，用户可能认为两者效果等价。应在 UI 添加格式说明 | | |
+| C28 | Core质量 | `compress_original()` 与 `compress_image()` 的格式分发逻辑重复 | 🟡 中 | 两者都根据格式选择压缩方法，但结构不统一。建议将 format→compressor 映射抽象为统一入口 | 是 | |
+| C29 | Core质量 | JPEG/PNG quality 语义不一致 | 🟢 低 | 已添加到设置页说明文字 | | 是 |
 | C30 | Core质量 | `AVIF speed` 硬编码为 4 | 🟢 低 | 已添加 `avif_speed` 配置字段，compress_avif_raw 接受 speed 参数 | | 是 |
 | C31 | Core质量 | Resize filter 硬编码为 `Lanczos3` | 🟢 低 | 已添加 `resize_filter` 配置字段，支持 lanczos3/triangle/catmullrom | | 是 |
 | C32 | Core质量 | `embed-resource` 仅支持 Windows | 🟡 中 | 已添加 macOS/Linux 编译时配置 | | 是 |
@@ -69,11 +69,11 @@
 | U08 | UI质量 | 目录递归扫描在 UI 线程同步执行 | 🟡 中 | `collect_images_from_dir()` 在 `FileDropped` 中同步调用，包含大量图片时阻塞 UI。应改为异步扫描 | | |
 | U09 | UI质量 | `load_system_font()` 硬编码字体路径 | 🟡 中 | 字体路径写死在代码中，建议使用 `fontdb` 动态扫描系统字体 | | |
 | U10 | UI质量 | 按钮纯文字占用过多宽度 | 🟢 低 | 已改善：header 按钮加了 emoji 前缀（📋 历史, 🔍 Emoji），但仍是 `Button::Text` 样式。建议改为真正的图标按钮（hover 背景色变化） | | |
-| U11 | UI质量 | 标题颜色纯白不跟随主题 | 🟡 中 | `header_style` 中 `text_color: Some(iced::Color::WHITE)` 固定写死。深色/浅色模式切换时标题文字颜色应自适应 | | |
-| U12 | UI质量 | drop_zone 不跟随 Theme 动态配色 | 🟡 中 | 已改善：从 `Color::WHITE` 改为 `Color::from_rgb(0.96, 0.96, 0.97)` 浅色背景。但 `_theme` 参数仍被忽略，暗色/浅色切换时背景色不变 | | |
-| U13 | UI质量 | `view` 和 `view_hovered` 代码重复 90%+ | 🟢 低 | 提取公共渲染函数，仅差异部分（hint 文本）作为参数 | | |
+| U11 | UI质量 | 标题颜色纯白不跟随主题 | 🟡 中 | Header 使用固定深色背景 + 白色文字，不影响暗色模式 | | 是 |
+| U12 | UI质量 | drop_zone 不跟随 Theme 动态配色 | 🟡 中 | drop_zone_style 已根据 Theme 选择浅色/深色背景 | | 是 |
+| U13 | UI质量 | `view` 和 `view_hovered` 代码重复 90%+ | 🟢 低 | 已提取公共渲染函数 | | 是 |
 | ~~U14~~ | ~~UI质量~~ | ~~progress 硬编码白色背景~~ | ~~🔴 高~~ | ~~已修复：`progress_style` 改为 `..Default::default()`，不再硬编码白色~~ | | 是 |
-| U15 | UI质量 | 取消按钮使用 Destructive 风格 | 🟢 低 | 取消压缩不是破坏性操作，使用 Secondary 风格更协调 | | |
+| U15 | UI质量 | 取消按钮使用 Destructive 风格 | 🟢 低 | 已改为 Secondary 风格 | | 是 |
 | ~~U16~~ | ~~UI质量~~ | ~~表格行缺少视觉层次~~ | ~~🟢 低~~ | ~~已修复：`result_table.rs` 新增 `row_bg_style`（成功用 SUCCESS_BG、失败用 ERROR_BG）~~ | | 是 |
 | U17 | UI质量 | 长文件名无截断 | 🟢 低 | 超长文件名会撑破布局，限制最大宽度并加省略效果 | | |
 | U18 | UI质量 | 预览体验差 | 🟡 中 | 点击预览同时打开原图和压缩图，更好的体验是内置 side-by-side 对比视图 | | |
@@ -81,7 +81,7 @@
 | U20 | UI质量 | 缺少 strip_metadata 开关 | 🟡 中 | 同上 | | |
 | U21 | UI质量 | 缺少 output_format 选择 | 🟡 中 | 同上 | | |
 | **U22** | **UI质量** | **GitHub 链接指向旧仓库** | **🔴 高** | 已改为 `cvooc/electron-imagemin-tools` | | 是 |
-| U23 | UI质量 | modal 硬编码白色卡片 | 🟡 中 | `card_style` 中 `Color::WHITE` 固定写死，暗色模式下应为深色。应跟随 Theme 动态配色 | | |
+| U23 | UI质量 | modal 硬编码白色卡片 | 🟡 中 | card_style 已根据 Theme 选择浅色/深色背景 | | 是 |
 | U24 | UI质量 | error_log.rs 无问题 | ✅ 好 | 无需修改 | | |
 | U25 | UI质量 | 缺少清空/删除历史功能 | 🟢 低 | 已添加 `History::clear()` + 历史页面清空按钮 | | 是 |
 | U26 | UI质量 | 按钮风格不协调 | 🟢 低 | 所有按钮使用默认 `Button::Text` 样式，视觉上像纯文本。应自定义按钮样式（hover 背景色变化） | | |

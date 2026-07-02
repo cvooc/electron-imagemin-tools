@@ -962,3 +962,21 @@ fn test_output_dir_special_chars() {
     assert!(result.compressed_size > 0);
     assert!(result.output_path.exists());
 }
+
+// === TC67: 根路径 SameDir ===
+#[test]
+fn test_tc67_same_dir_root() {
+    let cfg = imagemin_core::Config { output_mode: imagemin_core::OutputMode::SameDir, ..Default::default() };
+    let r = cfg.resolve_output_dir(Some(std::path::Path::new("/test.jpg")));
+    assert_ne!(r, std::path::Path::new("/"));
+    assert!(r.to_string_lossy().contains("same_dir"));
+}
+
+// === TC69: SUPPORTED_EXTENSIONS ===
+#[test]
+fn test_tc69_supported_exts() {
+    assert!(imagemin_core::SUPPORTED_EXTENSIONS.contains(&"avif"));
+    assert!(imagemin_core::SUPPORTED_EXTENSIONS.contains(&"jpg"));
+    assert!(imagemin_core::SUPPORTED_EXTENSIONS.contains(&"webp"));
+    assert_eq!(imagemin_core::SUPPORTED_EXTENSIONS.len(), 7);
+}
