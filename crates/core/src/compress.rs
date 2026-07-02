@@ -333,6 +333,7 @@ fn resize_if_needed(
     img: image::DynamicImage,
     max_width: Option<u32>,
     max_height: Option<u32>,
+    filter: &str,
 ) -> image::DynamicImage {
     let (w, h) = (img.width(), img.height());
     let limit_w = max_width.unwrap_or(u32::MAX);
@@ -346,7 +347,12 @@ fn resize_if_needed(
     let new_w = (w as f64 * ratio) as u32;
     let new_h = (h as f64 * ratio) as u32;
 
-    img.resize_exact(new_w, new_h, image::imageops::FilterType::Lanczos3)
+    let ftype = match filter {
+        "triangle" => image::imageops::FilterType::Triangle,
+        "catmullrom" => image::imageops::FilterType::CatmullRom,
+        _ => image::imageops::FilterType::Lanczos3,
+    };
+    img.resize_exact(new_w, new_h, ftype)
 }
 
 
@@ -380,6 +386,7 @@ fn compress_webp_encoder_rgba(
 fn compress_avif_raw(
     rgba: &image::RgbaImage,
     quality: u8,
+    speed: u8,
 ) -> Result<Vec<u8>, CompressError> {
     use ravif::{encode_rgba, Config, Img};
 
@@ -395,7 +402,7 @@ fn compress_avif_raw(
     let config = Config {
         quality: quality as f32,
         alpha_quality: quality as f32,
-        speed: 4,
+        speed: speed as u8,
         premultiplied_alpha: false,
         color_space: ravif::ColorSpace::RGB,
         threads: 0,
@@ -411,6 +418,7 @@ fn compress_avif_raw(
 fn compress_avif_from_rgb(
     rgb: &image::RgbImage,
     quality: u8,
+    speed: u8,
 ) -> Result<Vec<u8>, CompressError> {
     use ravif::{encode_rgb, Config, Img};
 
@@ -425,7 +433,7 @@ fn compress_avif_from_rgb(
     let config = Config {
         quality: quality as f32,
         alpha_quality: quality as f32,
-        speed: 4,
+        speed: speed as u8,
         premultiplied_alpha: false,
         color_space: ravif::ColorSpace::RGB,
         threads: 0,
@@ -473,7 +481,7 @@ pub fn compress_image(
             let new_name = change_extension(&filename, "jpg");
             let img = image::load_from_memory(&input)
                 .map_err(|e| CompressError::Image(e.to_string()))?;
-            let img = resize_if_needed(img, max_width, max_height);
+            let img = resize_if_needed(img, max_width, max_height, "lanczos3");
             let rgb = img.to_rgb8();
             (new_name, compress_jpeg_raw(&rgb, quality.jpeg)?)
         }
@@ -481,7 +489,7 @@ pub fn compress_image(
             let new_name = change_extension(&filename, "png");
             let img = image::load_from_memory(&input)
                 .map_err(|e| CompressError::Image(e.to_string()))?;
-            let img = resize_if_needed(img, max_width, max_height);
+            let img = resize_if_needed(img, max_width, max_height, "lanczos3");
             let rgba = img.to_rgba8();
             let data = compress_png_raw(&rgba, quality.png)?;
             (new_name, data)
@@ -490,7 +498,7 @@ pub fn compress_image(
             let new_name = change_extension(&filename, "webp");
             let img = image::load_from_memory(&input)
                 .map_err(|e| CompressError::Image(e.to_string()))?;
-            let img = resize_if_needed(img, max_width, max_height);
+            let img = resize_if_needed(img, max_width, max_height, "lanczos3");
             let data = if img.color().has_alpha() {
                 compress_webp_encoder_rgba(&img.to_rgba8(), quality.jpeg)?
             } else {
@@ -502,11 +510,11 @@ pub fn compress_image(
             let new_name = change_extension(&filename, "avif");
             let img = image::load_from_memory(&input)
                 .map_err(|e| CompressError::Image(e.to_string()))?;
-            let img = resize_if_needed(img, max_width, max_height);
+            let img = resize_if_needed(img, max_width, max_height, "lanczos3");
             let data = if img.color().has_alpha() {
-                compress_avif_raw(&img.to_rgba8(), quality.jpeg)?
+                compress_avif_raw(&img.to_rgba8(), quality.jpeg, 4)?
             } else {
-                compress_avif_from_rgb(&img.to_rgb8(), quality.jpeg)?
+                compress_avif_from_rgb(&img.to_rgb8(), quality.jpeg, 4)?
             };
             (new_name, data)
         }

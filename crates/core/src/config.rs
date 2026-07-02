@@ -138,7 +138,15 @@ pub struct Config {
     pub strip_metadata: bool,
     /// 输出图片格式。默认保持原格式。
     pub output_format: OutputFormat,
+    /// AVIF 编码速度（0=最慢最小，4=平衡，8=最快最大）
+    pub avif_speed: u8,
+    /// 缩小滤镜类型（lanczos3 / triangle / catmullrom）
+    pub resize_filter: String,
 }
+
+fn default_avif_speed() -> u8 { 4 }
+
+fn default_resize_filter() -> String { "lanczos3".to_string() }
 
 impl Default for Config {
     fn default() -> Self {
@@ -152,6 +160,8 @@ impl Default for Config {
             max_height: None,
             strip_metadata: false,
             output_format: OutputFormat::default(),
+            avif_speed: default_avif_speed(),
+            resize_filter: default_resize_filter(),
         }
     }
 }
