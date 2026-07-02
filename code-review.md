@@ -209,12 +209,12 @@
 | TC64 | 测试用例 | `test_config_atomic_write` | 集成 | C22 | 模拟并发写入配置，文件不应损坏 | | |
 | TC65 | 测试用例 | `test_compress_panic_recovery` | 集成 | C23 | spawn_blocking 内 panic 不应导致整个进程终止 | | |
 | TC66 | 测试用例 | `test_quality_zero_jpeg_result` | 集成 | C24 | quality=0 时 JPEG 输出是否为预期行为 | 是 | |
-| TC67 | 测试用例 | `test_compress_root_path_same_dir` | 集成 | C25 | 输入 `/photo.jpg` + SameDir 模式应正确处理 | | |
-| TC68 | 测试用例 | `test_compress_result_with_hash` | 单元 | C26 | CompressResult 应包含输出文件校验和字段 | | |
-| TC69 | 测试用例 | `test_supported_exts_consistency` | 单元 | C27 | 验证所有使用格式列表的地方引用同一常量 | | |
-| TC70 | 测试用例 | `test_compress_webp_lossless_naming` | 集成 | C02 | `-lossless.webp` 文件名在 Original 模式下的命名行为 | | |
-| TC71 | 测试用例 | `test_avif_speed_configurable` | 单元 | C30 | AVIF speed 参数应可通过配置调整 | | |
-| TC72 | 测试用例 | `test_resize_filter_configurable` | 单元 | C31 | resize 使用的 filter 类型应可配置 | | |
+| TC67 | 测试用例 | `test_compress_root_path_same_dir` | 集成 | C25 | 输入 `/photo.jpg` + SameDir 模式应正确处理 | | 是 |
+| TC68 | 测试用例 | `test_compress_result_with_hash` | 单元 | C26 | CompressResult 应包含输出文件校验和字段 | | 是 |
+| TC69 | 测试用例 | `test_supported_exts_consistency` | 单元 | C27 | 验证所有使用格式列表的地方引用同一常量 | | 是 |
+| TC70 | 测试用例 | `test_compress_webp_lossless_naming` | 集成 | C02 | `-lossless.webp` 文件名在 Original 模式下的命名行为 | | 是 |
+| TC71 | 测试用例 | `test_avif_speed_configurable` | 单元 | C30 | AVIF speed 参数应可通过配置调整 | | 是 |
+| TC72 | 测试用例 | `test_resize_filter_configurable` | 单元 | C31 | resize 使用的 filter 类型应可配置 | | 是 |
 | TC73 | 测试用例 | `test_strip_metadata_idempotent` | 集成 | C06 | 对已剥离元数据的 PNG 再次 strip_metadata 不应出错 | | |
 | TC74 | 测试用例 | `test_png_lossless_smaller_than_original` | 集成 | — | 无损 PNG 优化后应 <= 原大小 | | |
 | TC75 | 测试用例 | `test_gif_multiframe_preserved` | 集成 | C04 | 多帧 GIF 压缩后应保持动画，输出大小等于输入 | | |
