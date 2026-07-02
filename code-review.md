@@ -52,8 +52,8 @@
 | C29 | Core质量 | JPEG/PNG quality 语义不一致 | 🟢 低 | JPEG quality 映射编码器质量，PNG quality 映射 imagequant 质量，用户可能认为两者效果等价。应在 UI 添加格式说明 | | |
 | C30 | Core质量 | `AVIF speed` 硬编码为 4 | 🟢 低 | 已添加 `avif_speed` 配置字段，compress_avif_raw 接受 speed 参数 | | 是 |
 | C31 | Core质量 | Resize filter 硬编码为 `Lanczos3` | 🟢 低 | 已添加 `resize_filter` 配置字段，支持 lanczos3/triangle/catmullrom | | 是 |
-| C32 | Core质量 | `embed-resource` 仅支持 Windows | 🟡 中 | `icon.rc` 是 Windows 资源文件，macOS/Linux 打包时不会嵌入图标。应添加跨平台图标嵌入逻辑 | | |
-| C33 | Core质量 | `assets/test.png`（448KB）被打包进发布版 | 🟡 中 | 测试图片不应随发布版分发。应移到 `tests/fixtures/` 或在 `Cargo.toml` 中排除 | | |
+| C32 | Core质量 | `embed-resource` 仅支持 Windows | 🟡 中 | 已添加 macOS/Linux 编译时配置 | | 是 |
+| C33 | Core质量 | `assets/test.png`（448KB）被打包进发布版 | 🟡 中 | 已删除 assets/test.png（未被代码引用） | | 是 |
 | C34 | Core质量 | 完全缺少日志系统 | 🟡 中 | 除 UI 错误日志外无运行时日志，调试困难。建议引入 `tracing` 或 `log` crate 记录压缩参数、耗时、格式选择等 | | |
 | C35 | Core质量 | 无压缩耗时统计 | 🟢 低 | 可通过 `CompressResult.note` 获取备注信息 | | 是 |
 | C36 | Core质量 | 压缩后文件变大时无明确提示 | 🟢 低 | 已添加 `note` 字段，变大时标记"已是最优，无需压缩" | | 是 |
