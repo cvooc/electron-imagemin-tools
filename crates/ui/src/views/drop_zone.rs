@@ -34,15 +34,9 @@ fn drop_zone_hover_style(_theme: &Theme) -> container::Appearance {
     }
 }
 
-pub fn view(file_count: usize) -> Element<'static, Message> {
-    let hint = if file_count > 0 {
-        format!("📋 已选择 {} 个文件，点击开始压缩", file_count)
-    } else {
-        String::from("📂 点击选择图片 / 拖放图片或文件夹")
-    };
-
+fn drop_zone_content(hint: &str, icon: &str, style: fn(&Theme) -> container::Appearance) -> Element<'static, Message> {
     let content = column![
-        text("📂").shaping(Shaping::Advanced).size(48),
+        text(icon).shaping(Shaping::Advanced).size(48),
         text(hint).shaping(Shaping::Advanced).size(16),
         text("支持格式：JPG / PNG / GIF / SVG / WebP / AVIF").shaping(Shaping::Advanced).size(13),
     ]
@@ -54,7 +48,7 @@ pub fn view(file_count: usize) -> Element<'static, Message> {
         .height(Length::Fill)
         .center_x()
         .center_y()
-        .style(drop_zone_style);
+        .style(style);
 
     button(inner)
         .width(Length::Fill)
@@ -64,26 +58,15 @@ pub fn view(file_count: usize) -> Element<'static, Message> {
         .into()
 }
 
+pub fn view(file_count: usize) -> Element<'static, Message> {
+    let hint = if file_count > 0 {
+        format!("📋 已选择 {} 个文件，点击开始压缩", file_count)
+    } else {
+        String::from("📂 点击选择图片 / 拖放图片或文件夹")
+    };
+    drop_zone_content(&hint, "📂", drop_zone_style)
+}
+
 pub fn view_hovered() -> Element<'static, Message> {
-    let content = column![
-        text("📥").shaping(Shaping::Advanced).size(48),
-        text("释放鼠标以添加图片").shaping(Shaping::Advanced).size(16),
-        text("支持格式：JPG / PNG / GIF / SVG / WebP / AVIF").shaping(Shaping::Advanced).size(13),
-    ]
-    .spacing(10)
-    .align_items(iced::Alignment::Center);
-
-    let inner = container(content)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .center_x()
-        .center_y()
-        .style(drop_zone_hover_style);
-
-    button(inner)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(iced::theme::Button::Text)
-        .on_press(Message::SelectFiles)
-        .into()
+    drop_zone_content("释放鼠标以添加图片", "📥", drop_zone_hover_style)
 }

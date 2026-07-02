@@ -466,15 +466,33 @@ impl Application for App {
                 use iced::keyboard::Key;
                 let ctrl = modifiers.control();
                 match (key, ctrl) {
-                    // Escape: 返回主界面
+                    // Escape: 返回主界面或关闭弹窗
                     (Key::Named(iced::keyboard::key::Named::Escape), _) => {
-                        match self.state {
-                            AppState::Settings | AppState::History | AppState::ErrorLog | AppState::EmojiTest => {
-                                self.state = AppState::Idle;
+                        if self.show_clear_modal {
+                            self.show_clear_modal = false;
+                        } else {
+                            match self.state {
+                                AppState::Settings | AppState::History | AppState::ErrorLog | AppState::EmojiTest => {
+                                    self.state = AppState::Idle;
+                                }
+                                _ => {}
                             }
-                            _ => {}
                         }
                         Command::none()
+                    }
+                    // Enter: 确认弹窗
+                    (Key::Named(iced::keyboard::key::Named::Enter), _) => {
+                        if self.show_clear_modal {
+                            self.show_clear_modal = false;
+                            self.results.clear();
+                            self.files.clear();
+                            self.output_dir = None;
+                            self.state = AppState::Idle;
+                            self.toast = Some(toast::Toast::info("列表已清空"));
+                            toast_timeout()
+                        } else {
+                            Command::none()
+                        }
                     }
                     // Ctrl+O: 打开文件选择
                     (Key::Character(c), true) if c.as_str() == "o" => {

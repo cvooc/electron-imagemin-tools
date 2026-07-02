@@ -19,7 +19,7 @@ pub fn view(current: usize, total: usize, current_file: &str) -> Element<'static
         progress_bar(0.0..=1.0, pct).width(Length::Fill),
         button(text("取消压缩"))
             .on_press(Message::CancelCompression)
-            .style(iced::theme::Button::Destructive),
+            .style(iced::theme::Button::Secondary),
     ]
     .spacing(20)
     .align_items(iced::Alignment::Center);

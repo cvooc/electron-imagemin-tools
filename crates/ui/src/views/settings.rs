@@ -49,6 +49,8 @@ pub fn view(config: &Config) -> Element<'static, Message> {
     ]
     .spacing(12);
 
+    let quality_note = text("JPEG 质量越高文件越大；PNG 质量影响颜色精度").size(12);
+
     let png_lossless = checkbox("PNG 纯无损优化", config.png_lossless)
         .on_toggle(Message::PngLosslessChanged);
 
@@ -58,6 +60,7 @@ pub fn view(config: &Config) -> Element<'static, Message> {
         png_slider,
         png_lossless,
         text("推荐设为 80").size(12),
+        quality_note,
     ].spacing(12));
 
     let theme_buttons = row![
