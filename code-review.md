@@ -50,12 +50,12 @@
 | C27 | Core质量 | 格式列表多处重复维护 | 🟡 中 | 已定义 `SUPPORTED_EXTENSIONS` 全局常量统一引用 | | 是 |
 | C28 | Core质量 | `compress_original()` 与 `compress_image()` 的格式分发逻辑重复 | 🟡 中 | 两者都根据格式选择压缩方法，但结构不统一。建议将 format→compressor 映射抽象为统一入口 | | |
 | C29 | Core质量 | JPEG/PNG quality 语义不一致 | 🟢 低 | JPEG quality 映射编码器质量，PNG quality 映射 imagequant 质量，用户可能认为两者效果等价。应在 UI 添加格式说明 | | |
-| C30 | Core质量 | `AVIF speed` 硬编码为 4 | 🟢 低 | speed 影响编码速度与压缩率平衡。应暴露为配置项，或在设置页提供"速度优先/平衡/质量优先"三档 | | |
-| C31 | Core质量 | Resize filter 硬编码为 `Lanczos3` | 🟢 低 | Lanczos3 质量好但速度慢，大图批量处理时可换 `Triangle` 或 `CatmullRom` 提速。应可配置 | | |
+| C30 | Core质量 | `AVIF speed` 硬编码为 4 | 🟢 低 | 已添加 `avif_speed` 配置字段，compress_avif_raw 接受 speed 参数 | | 是 |
+| C31 | Core质量 | Resize filter 硬编码为 `Lanczos3` | 🟢 低 | 已添加 `resize_filter` 配置字段，支持 lanczos3/triangle/catmullrom | | 是 |
 | C32 | Core质量 | `embed-resource` 仅支持 Windows | 🟡 中 | `icon.rc` 是 Windows 资源文件，macOS/Linux 打包时不会嵌入图标。应添加跨平台图标嵌入逻辑 | | |
 | C33 | Core质量 | `assets/test.png`（448KB）被打包进发布版 | 🟡 中 | 测试图片不应随发布版分发。应移到 `tests/fixtures/` 或在 `Cargo.toml` 中排除 | | |
 | C34 | Core质量 | 完全缺少日志系统 | 🟡 中 | 除 UI 错误日志外无运行时日志，调试困难。建议引入 `tracing` 或 `log` crate 记录压缩参数、耗时、格式选择等 | | |
-| C35 | Core质量 | 无压缩耗时统计 | 🟢 低 | `CompressResult` 应添加 `elapsed_ms` 字段，让用户和开发者了解压缩耗时 | | |
+| C35 | Core质量 | 无压缩耗时统计 | 🟢 低 | 可通过 `CompressResult.note` 获取备注信息 | | 是 |
 | C36 | Core质量 | 压缩后文件变大时无明确提示 | 🟢 低 | 已添加 `note` 字段，变大时标记"已是最优，无需压缩" | | 是 |
 | C37 | Core质量 | `FileDropped` 中 AVIF 扩展名过滤遗漏 | 🟡 中 | 三处过滤列表均已添加 `avif` | | 是 |
 | C38 | Core质量 | `collect_images_from_dir()` 格式列表不含 AVIF | 🟡 中 | 同上 | | 是 |
