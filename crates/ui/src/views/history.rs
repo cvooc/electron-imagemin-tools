@@ -10,6 +10,8 @@ pub enum Message {
     Back,
     /// 打开某条历史记录的输出目录
     OpenDir(std::path::PathBuf),
+    /// 清空全部历史
+    ClearAll,
 }
 
 pub fn view(entries: &[HistoryEntry]) -> Element<'static, Message> {
@@ -69,9 +71,12 @@ pub fn view(entries: &[HistoryEntry]) -> Element<'static, Message> {
         rows = rows.push(entry_row);
     }
 
-    let back_btn = button(text("← 返回")).on_press(Message::Back);
+    let back_btn = button(text("← 返回").shaping(Shaping::Advanced)).on_press(Message::Back);
+    let clear_btn = button(text("清空历史")).on_press(Message::ClearAll).style(iced::theme::Button::Destructive);
 
-    let content = column![back_btn, scrollable(rows)].spacing(12).padding(16);
+    let top_bar = row![back_btn, iced::widget::horizontal_space(), clear_btn].spacing(8);
+
+    let content = column![top_bar, scrollable(rows)].spacing(12).padding(16);
 
     container(content)
         .width(Length::Fill)

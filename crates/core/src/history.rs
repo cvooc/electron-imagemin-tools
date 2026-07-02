@@ -66,12 +66,16 @@ impl History {
         std::fs::write(&path, content)
     }
 
-    /// 添加一条记录
+    /// 添加一条记录。保持最多 100 条，自动丢弃最旧的记录。
     pub fn add(&mut self, entry: HistoryEntry) {
         self.entries.push(entry);
-        // 最多保留 100 条
         if self.entries.len() > 100 {
             self.entries.remove(0);
         }
+    }
+
+    /// 清空所有历史记录
+    pub fn clear(&mut self) {
+        self.entries.clear();
     }
 }

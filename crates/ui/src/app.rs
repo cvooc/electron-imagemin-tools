@@ -326,6 +326,12 @@ impl Application for App {
                 open::that(&dir).ok();
                 Command::none()
             }
+            Message::History(history::Message::ClearAll) => {
+                self.history.clear();
+                let _ = self.history.save();
+                self.toast = Some(toast::Toast::info("历史已清空"));
+                toast_timeout()
+            }
             Message::ErrorLog(error_log::Message::Back) => {
                 self.state = AppState::Idle;
                 Command::none()
@@ -553,6 +559,9 @@ impl App {
         let cancel_flag = Arc::new(AtomicBool::new(false));
         self.cancel_flag = Some(cancel_flag.clone());
 
+        // 使用 Semaphore 限制最多 4 个并行压缩任务，避免高并发导致资源耗尽
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(4));
+
         // 并行发起所有压缩任务
         let cmds: Vec<Command<Message>> = self
             .files
@@ -562,8 +571,9 @@ impl App {
                 let path = path.clone();
                 let config = self.config.clone();
                 let flag = cancel_flag.clone();
+                let sem = semaphore.clone();
                 Command::perform(
-                    compress_single(i, total, path, config, flag),
+                    compress_single(i, total, path, config, flag, sem),
                     move |(idx, tot, row, out)| Message::CompressProgress(idx, tot, row, out),
                 )
             })
@@ -658,7 +668,15 @@ async fn compress_single(
     path: PathBuf,
     config: Config,
     cancel_flag: Arc<AtomicBool>,
+    semaphore: Arc<tokio::sync::Semaphore>,
 ) -> (usize, usize, Option<result_table::Row>, Option<PathBuf>) {
+    // 获取并发许可，最多 4 个任务同时运行
+    let _permit = semaphore.acquire().await.unwrap_or_else(|_| {
+        // semaphore 已关闭时添加回一个 permit 并继续
+        semaphore.add_permits(1);
+        semaphore.try_acquire().unwrap()
+    });
+
     // 快速检查取消标志
     if cancel_flag.load(Ordering::Relaxed) {
         return (index, total, None, None);

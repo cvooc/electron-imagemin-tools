@@ -116,7 +116,10 @@ fn quantize_to_indexed_png(
             .map_err(|e| CompressError::Image(e.to_string()))?;
     }
 
-    let opts = oxipng::Options::from_preset(3);
+    let opts = oxipng::Options {
+        strip: oxipng::StripChunks::Safe,
+        ..oxipng::Options::from_preset(3)
+    };
     let optimized = oxipng::optimize_from_memory(&png_data, &opts)
         .map_err(|e| CompressError::Image(e.to_string()))?;
 
@@ -341,16 +344,6 @@ fn resize_if_needed(
     img.resize_exact(new_w, new_h, image::imageops::FilterType::Lanczos3)
 }
 
-/// 剥离 PNG 中的元数据块（EXIF、XMP、ICC 等辅助块）。
-/// 对于 JPEG，mozjpeg 重新编码时默认不写入元数据。
-fn strip_metadata_from_png(data: &[u8]) -> Result<Vec<u8>, CompressError> {
-    let opts = oxipng::Options {
-        strip: oxipng::StripChunks::Safe,
-        ..oxipng::Options::from_preset(3)
-    };
-    oxipng::optimize_from_memory(data, &opts)
-        .map_err(|e| CompressError::Image(e.to_string()))
-}
 
 /// 将 RGB 数据编码为 WebP。
 fn compress_webp_encoder_rgb(
@@ -447,7 +440,7 @@ pub fn compress_image(
     output_format: OutputFormat,
     max_width: Option<u32>,
     max_height: Option<u32>,
-    strip_metadata: bool,
+    _strip_metadata: bool,
 ) -> Result<CompressResult, CompressError> {
     quality
         .validate()
@@ -485,10 +478,7 @@ pub fn compress_image(
                 .map_err(|e| CompressError::Image(e.to_string()))?;
             let img = resize_if_needed(img, max_width, max_height);
             let rgba = img.to_rgba8();
-            let mut data = compress_png_raw(&rgba, quality.png)?;
-            if strip_metadata {
-                data = strip_metadata_from_png(&data)?;
-            }
+            let data = compress_png_raw(&rgba, quality.png)?;
             (new_name, data)
         }
         OutputFormat::WebP => {
@@ -566,6 +556,8 @@ fn compress_original(
             Ok((png_name, compress_svg(input, quality.png)?))
         }
         "webp" => {
+            // 若文件名含 -lossless 后缀则保留 .webp（用户明确表示想要无损格式）
+            // 否则转为 JPEG（WebP 输入在 Original 模式下默认转 JPEG）
             let output_name = if filename
                 .to_lowercase()
                 .ends_with("-lossless.webp")
@@ -595,13 +587,13 @@ pub fn compress_images(
     output_format: OutputFormat,
     max_width: Option<u32>,
     max_height: Option<u32>,
-    strip_metadata: bool,
+    _strip_metadata: bool,
 ) -> Vec<Result<CompressResult, CompressError>> {
     use rayon::prelude::*;
 
     input_paths
         .par_iter()
-        .map(|path| compress_image(path, output_dir, quality, png_lossless, output_format, max_width, max_height, strip_metadata))
+        .map(|path| compress_image(path, output_dir, quality, png_lossless, output_format, max_width, max_height, _strip_metadata))
         .collect()
 }
 
