@@ -21,7 +21,7 @@
 
 | 序号 | 模块 | 名称 | 严重度 | 说明 | 是否忽略 | 开发完成 |
 |------|------|------|--------|------|----------|----------|
-| C01 | Core质量 | `compress_image()` 参数过多（9个参数） | 🟡 中 | 建议引入 `CompressOptions` struct 聚合参数，提高可维护性 | | |
+| C01 | Core质量 | `compress_image()` 参数过多（9个参数） | 🟡 中 | 已创建 `CompressOptions` struct，待接入 `compress_image` | | |
 | C02 | Core质量 | `compress_original()` 中对 WebP 的特殊命名逻辑耦合 | 🟡 中 | 已添加 `-lossless.webp` 命名约定注释说明 | | 是 |
 | C03 | Core质量 | `compress_png()` 中的双重解码 | 🟡 中 | 先 `oxipng::optimize_from_memory`，失败后又用 `image::load_from_memory`，两个路径都对内存进行完整读取和解析，可以考虑优化为单一解码路径 | | |
 | C04 | Core质量 | GIF 多帧动画直接返回原数据但无日志 | 🟢 低 | 已添加 eprintln 日志告知用户未压缩 | | 是 |
@@ -200,15 +200,15 @@
 | TC55 | 测试用例 | `test_config_output_dir_custom` | 集成 | Custom 返回指定路径 | | 是 |
 | TC56 | 测试用例 | `test_config_output_dir_custom_fallback` | 集成 | Custom 为空时回退到 Timestamped | | 是 |
 | TC57 | 测试用例 | `test_config_save_and_load` | 集成 | 配置保存后加载值一致 | | 是 |
-| TC58 | 测试用例 | `test_compress_webp_as_input_original_format` | 集成 | C07 | 合法 WebP 文件选择 `OutputFormat::Original` 时正确压缩 | | |
-| TC59 | 测试用例 | `test_compress_svg_oversized_rasterization` | 集成 | C18 | SVG width=5000 时应被限制到最大分辨率，不 OOM | | |
-| TC60 | 测试用例 | `test_compress_avif_large_image_fallback` | 集成 | C19 | >16MP 图片转 AVIF 时应降级处理，不 panic | | |
-| TC61 | 测试用例 | `test_collect_images_deep_nesting` | 集成 | C20 | 10 层以上嵌套目录应被截断，不栈溢出 | | |
-| TC62 | 测试用例 | `test_collect_images_circular_symlink` | 集成 | C20 | 循环符号链接应被检测并跳过 | | |
-| TC63 | 测试用例 | `test_compress_image_overwrite_existing` | 集成 | C21 | 输出目录已存在同名文件时的覆盖/重命名行为 | | |
+| TC58 | 测试用例 | `test_compress_webp_as_input_original_format` | 集成 | C07 | 合法 WebP 文件选择 `OutputFormat::Original` 时正确压缩 | | 是 |
+| TC59 | 测试用例 | `test_compress_svg_oversized_rasterization` | 集成 | C18 | SVG width=5000 时应被限制到最大分辨率，不 OOM | | 是 |
+| TC60 | 测试用例 | `test_compress_avif_large_image_fallback` | 集成 | C19 | >16MP 图片转 AVIF 时应降级处理，不 panic | 是 | |
+| TC61 | 测试用例 | `test_collect_images_deep_nesting` | 集成 | C20 | 10 层以上嵌套目录应被截断，不栈溢出 | | 是 |
+| TC62 | 测试用例 | `test_collect_images_circular_symlink` | 集成 | C20 | 循环符号链接应被检测并跳过 | 是 | |
+| TC63 | 测试用例 | `test_compress_image_overwrite_existing` | 集成 | C21 | 输出目录已存在同名文件时的覆盖/重命名行为 | | 是 |
 | TC64 | 测试用例 | `test_config_atomic_write` | 集成 | C22 | 模拟并发写入配置，文件不应损坏 | | |
 | TC65 | 测试用例 | `test_compress_panic_recovery` | 集成 | C23 | spawn_blocking 内 panic 不应导致整个进程终止 | | |
-| TC66 | 测试用例 | `test_quality_zero_jpeg_result` | 集成 | C24 | quality=0 时 JPEG 输出是否为预期行为 | | |
+| TC66 | 测试用例 | `test_quality_zero_jpeg_result` | 集成 | C24 | quality=0 时 JPEG 输出是否为预期行为 | 是 | |
 | TC67 | 测试用例 | `test_compress_root_path_same_dir` | 集成 | C25 | 输入 `/photo.jpg` + SameDir 模式应正确处理 | | |
 | TC68 | 测试用例 | `test_compress_result_with_hash` | 单元 | C26 | CompressResult 应包含输出文件校验和字段 | | |
 | TC69 | 测试用例 | `test_supported_exts_consistency` | 单元 | C27 | 验证所有使用格式列表的地方引用同一常量 | | |
