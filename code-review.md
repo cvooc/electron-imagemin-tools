@@ -42,10 +42,10 @@
 | C19 | Core质量 | AVIF 编码无尺寸保护 | 🟡 中 | `ravif::encode_rgba` 在超大图片上同样可能 OOM，且 `speed: 4` 在慢速模式下内存占用更高。建议大图片（>16MP）降级处理 | | |
 | C20 | Core质量 | `collect_images_from_dir()` 递归无深度限制 | 🟡 中 | 已添加 MAX_DEPTH=10、MAX_FILES=10000 限制 | | 是 |
 | C21 | Core质量 | 同名文件直接覆盖无提示 | 🔴 高 | 已添加自动重命名 `name_1.ext`、`name_2.ext` | | 是 |
-| C22 | Core质量 | 配置读写无文件锁 | 🟡 中 | 多实例同时启动时同时读写 `config.toml` / `history.json` 可能损坏文件。应使用原子写入（先写临时文件再 rename） | | |
-| C23 | Core质量 | `spawn_blocking` 内 panic 无保护 | 🟢 低 | `compress_single()` 用 `tokio::task::spawn_blocking().await.unwrap_or_else()` 捕获 JoinError，但内部未 `catch_unwind`，Rust panic 会导致整个进程终止。应添加 `std::panic::catch_unwind` | | |
-| C24 | Core质量 | `Quality::validate()` 允许 quality=0 | 🟢 低 | quality=0 时 JPEG 几乎全黑，PNG 量化完全失真。建议设合理下限（JPEG 最低 5，PNG 最低 10） | | |
-| C25 | Core质量 | `SameDir` 模式在根路径时行为异常 | 🟢 低 | 输入 `/photo.jpg` 时 `.parent()` 返回 `/`，可能因权限写入失败。应加边界处理和回退逻辑 | | |
+| C22 | Core质量 | 配置读写无文件锁 | 🟡 中 | 已添加 config.toml / history.json 原子写入 | | 是 |
+| C23 | Core质量 | `spawn_blocking` 内 panic 无保护 | 🟢 低 | 已添加 `std::panic::catch_unwind` 保护 | | 是 |
+| C24 | Core质量 | `Quality::validate()` 允许 quality=0 | 🟢 低 | 已设下限：JPEG=5, PNG=10 | | 是 |
+| C25 | Core质量 | `SameDir` 模式在根路径时行为异常 | 🟢 低 | 根路径 `/` 和 `\\` 时回退到 base_output_dir | | 是 |
 | C26 | Core质量 | `CompressResult` 缺少校验和 | 🟢 低 | 无法验证输出文件完整性。建议添加 xxhash 等校验和字段 | | |
 | C27 | Core质量 | 格式列表多处重复维护 | 🟡 中 | 已定义 `SUPPORTED_EXTENSIONS` 全局常量统一引用 | | 是 |
 | C28 | Core质量 | `compress_original()` 与 `compress_image()` 的格式分发逻辑重复 | 🟡 中 | 两者都根据格式选择压缩方法，但结构不统一。建议将 format→compressor 映射抽象为统一入口 | | |

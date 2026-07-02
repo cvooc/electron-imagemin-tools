@@ -442,6 +442,26 @@ impl Application for App {
                 }
                 Command::none()
             }
+            Message::Settings(settings::Message::MaxWidthChanged(val)) => {
+                self.config.max_width = val.parse::<u32>().ok().filter(|&v| v > 0);
+                let _ = self.config.save();
+                Command::none()
+            }
+            Message::Settings(settings::Message::MaxHeightChanged(val)) => {
+                self.config.max_height = val.parse::<u32>().ok().filter(|&v| v > 0);
+                let _ = self.config.save();
+                Command::none()
+            }
+            Message::Settings(settings::Message::StripMetadataChanged(val)) => {
+                self.config.strip_metadata = val;
+                let _ = self.config.save();
+                Command::none()
+            }
+            Message::Settings(settings::Message::OutputFormatChanged(val)) => {
+                self.config.output_format = val;
+                let _ = self.config.save();
+                Command::none()
+            }
             Message::KeyPressed(key, modifiers) => {
                 use iced::keyboard::Key;
                 let ctrl = modifiers.control();

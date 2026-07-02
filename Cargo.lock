@@ -2403,6 +2403,7 @@ name = "imagemin-core"
 version = "1.0.0"
 dependencies = [
  "chrono",
+ "crc32fast",
  "dirs 5.0.1",
  "gif 0.13.3",
  "image 0.25.10",

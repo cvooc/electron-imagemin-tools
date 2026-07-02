@@ -1,6 +1,6 @@
-use iced::widget::{button, checkbox, column, container, row, scrollable, slider, text};
+use iced::widget::{button, checkbox, column, container, row, scrollable, slider, text, text_input};
 use iced::{Element, Length};
-use imagemin_core::{Config, OutputMode, ThemeMode};
+use imagemin_core::{Config, OutputFormat, OutputMode, ThemeMode};
 
 use crate::theme;
 
@@ -13,6 +13,10 @@ pub enum Message {
     ThemeChanged(ThemeMode),
     SelectCustomOutputDir,
     CustomOutputDirSelected(std::path::PathBuf),
+    MaxWidthChanged(String),
+    MaxHeightChanged(String),
+    StripMetadataChanged(bool),
+    OutputFormatChanged(OutputFormat),
 }
 
 fn card_style(_theme: &iced::Theme) -> container::Appearance {
@@ -92,6 +96,48 @@ pub fn view(config: &Config) -> Element<'static, Message> {
         custom_dir_row,
     ].spacing(12));
 
+    // 尺寸限制卡片
+    let max_w_str = config.max_width.map(|v| v.to_string()).unwrap_or_default();
+    let max_h_str = config.max_height.map(|v| v.to_string()).unwrap_or_default();
+
+    let resize_card_content = column![
+        section_title("图片尺寸"),
+        row![
+            text("最大宽度: ").width(Length::FillPortion(1)),
+            text_input("不限制", &max_w_str)
+                .on_input(Message::MaxWidthChanged)
+                .width(Length::FillPortion(1)),
+            text("px").size(12),
+        ].spacing(8).align_items(iced::Alignment::Center),
+        row![
+            text("最大高度: ").width(Length::FillPortion(1)),
+            text_input("不限制", &max_h_str)
+                .on_input(Message::MaxHeightChanged)
+                .width(Length::FillPortion(1)),
+            text("px").size(12),
+        ].spacing(8).align_items(iced::Alignment::Center),
+        text("留空则不限制，超出时等比缩小").size(12),
+    ].spacing(8);
+
+    let resize_card = card_container(resize_card_content);
+
+    // 高级卡片
+    let output_fmt_buttons = row![
+        fmt_button("原格式", OutputFormat::Original, config.output_format),
+        fmt_button("JPEG", OutputFormat::Jpeg, config.output_format),
+        fmt_button("PNG", OutputFormat::Png, config.output_format),
+        fmt_button("WebP", OutputFormat::WebP, config.output_format),
+        fmt_button("AVIF", OutputFormat::Avif, config.output_format),
+    ].spacing(4);
+
+    let advanced_card = card_container(column![
+        section_title("高级"),
+        checkbox("剥离元数据 (EXIF/XMP/ICC)", config.strip_metadata)
+            .on_toggle(Message::StripMetadataChanged),
+        text("输出格式").size(14),
+        output_fmt_buttons,
+    ].spacing(8));
+
     let version = env!("CARGO_PKG_VERSION");
     let about_card = card_container(column![
         section_title("关于"),
@@ -103,6 +149,8 @@ pub fn view(config: &Config) -> Element<'static, Message> {
         theme_card,
         quality_card,
         output_card,
+        resize_card,
+        advanced_card,
         about_card,
     ]
     .spacing(16)
@@ -132,5 +180,15 @@ fn theme_button(label: &'static str, mode: ThemeMode, current: ThemeMode) -> Ele
         btn.style(iced::theme::Button::Primary).into()
     } else {
         btn.on_press(Message::ThemeChanged(mode)).into()
+    }
+}
+
+fn fmt_button(label: &'static str, mode: OutputFormat, current: OutputFormat) -> Element<'static, Message> {
+    let active = mode == current;
+    let btn = button(text(label));
+    if active {
+        btn.style(iced::theme::Button::Primary).into()
+    } else {
+        btn.on_press(Message::OutputFormatChanged(mode)).into()
     }
 }

@@ -21,6 +21,10 @@ pub struct CompressResult {
     pub original_size: u64,
     pub compressed_size: u64,
     pub output_path: PathBuf,
+    /// 输出文件 xxhash3 校验和（十六进制）
+    pub checksum: String,
+    /// 备注，如 "已是最优，无需压缩"
+    pub note: String,
 }
 
 fn compress_jpeg_raw(rgb: &image::RgbImage, quality: u8) -> Result<Vec<u8>, CompressError> {
@@ -530,11 +534,28 @@ pub fn compress_image(
 
     std::fs::write(&output_path, &compressed)?;
 
+    // 计算输出文件校验和
+    let checksum = {
+        use std::hash::Hasher;
+        let mut hasher = crc32fast::Hasher::new();
+        hasher.write(&compressed);
+        format!("{:08x}", hasher.finish())
+    };
+
+    // 判断是否已是最优（压缩后反而变大或未变小）
+    let note = if compressed.len() >= input.len() {
+        "已是最优，无需压缩".to_string()
+    } else {
+        String::new()
+    };
+
     Ok(CompressResult {
         name: output_filename,
         original_size: input.len() as u64,
         compressed_size: compressed.len() as u64,
         output_path,
+        checksum,
+        note,
     })
 }
 
