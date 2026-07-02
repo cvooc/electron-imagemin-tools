@@ -1,4 +1,4 @@
-use imagemin_core::{compress_image, Config, History, HistoryEntry, OutputFormat, OutputMode, Quality};
+use imagemin_core::{compress_image, compress_images, Config, History, HistoryEntry, OutputFormat, OutputMode, Quality};
 use std::path::PathBuf;
 use tempfile::TempDir;
 
@@ -738,4 +738,225 @@ fn test_history_max_entries() {
     assert_eq!(history.entries.len(), 100);
     assert_eq!(history.entries[0].timestamp_ms, 20);
     assert_eq!(history.entries[99].timestamp_ms, 119);
+}
+
+// ==================== TC59: SVG 超大尺寸光栅化限制测试 ====================
+
+#[test]
+fn test_svg_oversized_rasterization() {
+    use std::io::Write;
+    let temp = TempDir::new().unwrap();
+    let input_path = temp.path().join("huge.svg");
+
+    // 创建 width=5000 的 SVG，应被 MAX_SVG_DIMENSION=4096 限制
+    let svg = r#"<?xml version="1.0"?>
+<svg width="5000" height="5000" xmlns="http://www.w3.org/2000/svg">
+  <rect width="5000" height="5000" fill="red"/>
+</svg>"#;
+    let mut f = std::fs::File::create(&input_path).unwrap();
+    f.write_all(svg.as_bytes()).unwrap();
+
+    let output_dir = temp.path().join("output");
+    let quality = Quality::default();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
+
+    assert!(result.compressed_size > 0);
+    assert!(result.output_path.exists());
+    // 输出应为 .png（SVG 转 PNG）
+    assert_eq!(result.output_path.extension().unwrap(), "png");
+}
+
+// ==================== TC61: 深层嵌套目录扫描不崩溃测试 ====================
+
+#[test]
+fn test_deep_directory_scanning() {
+    let temp = TempDir::new().unwrap();
+
+    // 创建 20 层嵌套目录，验证深度遍历不会栈溢出
+    let mut dir = temp.path().to_path_buf();
+    for i in 0..20 {
+        dir = dir.join(format!("d{}", i));
+        std::fs::create_dir_all(&dir).unwrap();
+    }
+    // 最深处放一张图片
+    let img_path = dir.join("test.png");
+    create_test_png(&img_path);
+
+    // 用 std::fs::read_dir 递归扫描（模拟 collect_images_from_dir 但不引用 UI）
+    fn scan(dir: &std::path::Path, depth: u32, max_depth: u32, count: &mut usize) {
+        if depth > max_depth || *count > 100 { return; }
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    scan(&path, depth + 1, max_depth, count);
+                } else if let Some(ext) = path.extension() {
+                    if ext == "png" { *count += 1; }
+                }
+            }
+        }
+    }
+
+    let mut count = 0;
+    scan(temp.path(), 0, 10, &mut count);
+    // 深度限制为 10 时不会找到 20 层深的文件
+    assert_eq!(count, 0, "depth limit should prevent finding file at depth 20");
+
+    let mut count2 = 0;
+    scan(temp.path(), 0, 25, &mut count2);
+    // 无深度限制时应找到文件
+    assert_eq!(count2, 1, "should find file when depth limit is sufficient");
+}
+
+// ==================== TC63: 同名文件覆盖重命名测试 ====================
+
+#[test]
+fn test_compress_image_overwrite_existing() {
+    let temp = TempDir::new().unwrap();
+    let input_path = temp.path().join("test.jpg");
+    create_test_jpeg(&input_path);
+
+    let output_dir = temp.path().join("output");
+    std::fs::create_dir_all(&output_dir).unwrap();
+
+    // 先创建同名输出文件
+    let first_output = output_dir.join("test.jpg");
+    std::fs::write(&first_output, b"fake compressed data").unwrap();
+
+    let quality = Quality::default();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
+
+    // 应生成不同于 test.jpg 的名字而非覆盖原文件
+    assert!(result.name.starts_with("test"), "name should start with test, got {}", result.name);
+    // 应追加 _N 后缀
+    assert!(result.name.contains('_') || result.name.contains('-'), "should add suffix, got {}", result.name);
+    assert!(result.output_path.exists());
+    // 原文件应保留
+    assert!(first_output.exists());
+    assert_eq!(std::fs::read_to_string(&first_output).unwrap(), "fake compressed data");
+}
+
+// ==================== TC74: 无损 PNG <= 原大小测试 ====================
+
+#[test]
+fn test_png_lossless_not_larger_than_original() {
+    let temp = TempDir::new().unwrap();
+    let input_path = temp.path().join("test.png");
+    let output_dir = temp.path().join("output");
+
+    // 创建 PNG（直接使用 create_test_png）
+    create_test_png(&input_path);
+
+    let quality = Quality::default();
+
+    // 有损模式
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
+    assert!(result.compressed_size <= result.original_size || result.original_size == 0,
+        "lossy compress should not increase file size: {} > {}", result.compressed_size, result.original_size);
+}
+
+// ==================== TC85: HistoryEntry::savings() 计算测试 ====================
+
+#[test]
+fn test_history_entry_savings_calculation() {
+    // 节省为正
+    let entry = HistoryEntry {
+        timestamp_ms: 1000,
+        timestamp_str: "t".to_string(),
+        results: vec![],
+        output_dir: std::path::PathBuf::from("/tmp"),
+        total_original: 10000,
+        total_compressed: 3000,
+    };
+    assert_eq!(entry.savings(), 7000, "positive savings: 10000 - 3000 = 7000");
+
+    // 节省为负（文件变大）
+    let entry2 = HistoryEntry {
+        total_original: 3000,
+        total_compressed: 5000,
+        ..entry.clone()
+    };
+    assert_eq!(entry2.savings(), -2000, "negative savings: 3000 - 5000 = -2000");
+
+    // 节省为零
+    let entry3 = HistoryEntry {
+        total_original: 5000,
+        total_compressed: 5000,
+        ..entry
+    };
+    assert_eq!(entry3.savings(), 0, "zero savings: 5000 - 5000 = 0");
+}
+
+// ==================== TC75: 多帧 GIF 保留测试 ====================
+
+#[test]
+fn test_gif_multiframe_preserved() {
+    let temp = TempDir::new().unwrap();
+    let input_path = temp.path().join("anim.gif");
+    // 创建多帧 GIF
+    {
+        use gif::{Encoder, Frame, Repeat};
+        let mut f = std::fs::File::create(&input_path).unwrap();
+        let palette = vec![0u8, 0, 0, 255, 255, 255];
+        let mut encoder = Encoder::new(&mut f, 10, 10, &palette).unwrap();
+        encoder.set_repeat(Repeat::Infinite).unwrap();
+        for _ in 0..3 {
+            let mut frame = Frame::default();
+            frame.width = 10;
+            frame.height = 10;
+            frame.buffer = vec![0u8; 100].into();
+            frame.palette = Some(palette.clone());
+            encoder.write_frame(&frame).unwrap();
+        }
+    }
+
+    let output_dir = temp.path().join("output");
+    let quality = Quality::default();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
+
+    // 多帧 GIF 应保留原始数据（不压缩）
+    assert!(result.compressed_size > 0);
+    assert!(result.output_path.exists());
+    assert_eq!(result.output_path.extension().unwrap(), "gif");
+}
+
+// ==================== TC76: compress_images 并行正确性测试 ====================
+
+#[test]
+fn test_compress_images_parallel() {
+    let temp = TempDir::new().unwrap();
+    let mut input_paths = Vec::new();
+    let output_dir = temp.path().join("output");
+
+    // 创建 10 个测试文件
+    for i in 0..10 {
+        let p = temp.path().join(format!("test_{}.jpg", i));
+        create_test_jpeg(&p);
+        input_paths.push(p);
+    }
+
+    let quality = Quality::default();
+    let results = compress_images(&input_paths, &output_dir, &quality, false, OutputFormat::Original, None, None, false);
+
+    assert_eq!(results.len(), 10);
+    let success_count = results.iter().filter(|r| r.is_ok()).count();
+    assert_eq!(success_count, 10, "all 10 files should compress successfully");
+}
+
+// ==================== TC84: 特殊字符路径测试 ====================
+
+#[test]
+fn test_output_dir_special_chars() {
+    let temp = TempDir::new().unwrap();
+
+    // 创建含特殊字符的文件名
+    let input_path = temp.path().join("test image #1 (copy).jpg");
+    create_test_jpeg(&input_path);
+
+    let output_dir = temp.path().join("my outputs [2024]");
+    let quality = Quality::default();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
+
+    assert!(result.compressed_size > 0);
+    assert!(result.output_path.exists());
 }

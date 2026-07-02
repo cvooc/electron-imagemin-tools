@@ -511,19 +511,20 @@ pub fn compress_image(
     std::fs::create_dir_all(output_dir)?;
 
     // 若输出文件已存在，自动追加编号避免覆盖
-    let output_path = if output_path.exists() {
+    let (output_filename, output_path) = if output_path.exists() {
         let stem = output_path.file_stem().and_then(|s| s.to_str()).unwrap_or("file");
         let ext = output_path.extension().and_then(|s| s.to_str()).unwrap_or("");
         let mut counter = 1;
         loop {
-            let candidate = output_dir.join(format!("{}_{}.{}", stem, counter, ext));
+            let new_name = format!("{}_{}.{}", stem, counter, ext);
+            let candidate = output_dir.join(&new_name);
             if !candidate.exists() {
-                break candidate;
+                break (new_name, candidate);
             }
             counter += 1;
         }
     } else {
-        output_path
+        (output_filename, output_path)
     };
 
     std::fs::write(&output_path, &compressed)?;
