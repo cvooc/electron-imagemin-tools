@@ -187,6 +187,7 @@ impl Config {
             }
             OutputMode::SameDir => input_path
                 .and_then(|p| p.parent())
+                .filter(|p| p.as_os_str() != "/" && p.as_os_str() != "\\")
                 .map(Path::to_path_buf)
                 .unwrap_or_else(|| Self::base_output_dir().join("same_dir")),
             OutputMode::Custom => self
@@ -231,7 +232,11 @@ impl Config {
         let path = Self::config_path();
         let content = toml::to_string_pretty(self)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-        std::fs::write(&path, content)
+        // 原子写入：先写临时文件再重命名
+        let tmp_path = dir.join("config.toml.tmp");
+        std::fs::write(&tmp_path, &content)?;
+        std::fs::rename(&tmp_path, &path)?;
+        Ok(())
     }
 }
 

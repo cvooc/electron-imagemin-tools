@@ -56,14 +56,17 @@ impl History {
         }
     }
 
-    /// 保存历史记录
+    /// 保存历史记录（原子写入）
     pub fn save(&self) -> Result<(), std::io::Error> {
         let dir = crate::Config::config_dir();
         std::fs::create_dir_all(&dir)?;
         let path = Self::history_path();
         let content = serde_json::to_string_pretty(self)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-        std::fs::write(&path, content)
+        let tmp_path = dir.join("history.json.tmp");
+        std::fs::write(&tmp_path, &content)?;
+        std::fs::rename(&tmp_path, &path)?;
+        Ok(())
     }
 
     /// 添加一条记录。保持最多 100 条，自动丢弃最旧的记录。

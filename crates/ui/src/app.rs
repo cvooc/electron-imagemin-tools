@@ -689,46 +689,36 @@ async fn compress_single(
     let panic_name = fallback_name.clone();
 
     let result = tokio::task::spawn_blocking(move || {
+        // 用 catch_unwind 保护，防止 Rust panic 导致整个进程终止
+        let panic_path = path.clone();
+        let output_dir = resolve_output_dir(&config, &path);
+        let fallback_name2 = fallback_name.clone();
+        let output_dir2 = output_dir.clone();
+
+        let inner = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         // 检查是否已被取消
         if cancel_flag.load(Ordering::Relaxed) {
-            return (
-                None,
-                None,
-            );
+            return (None, None);
         }
 
-        let output_dir = resolve_output_dir(&config, &path);
-
         if let Err(e) = std::fs::create_dir_all(&output_dir) {
-            return (
-                Some(result_table::Row {
-                    name: fallback_name,
-                    original_size: 0,
-                    compressed_size: 0,
-                    status: Err(format!("创建输出目录失败: {}", e)),
-                    input_path: Some(path.clone()),
-                    output_path: None,
-                }),
-                Some(output_dir),
-            );
+            return (Some(result_table::Row {
+                name: fallback_name,
+                original_size: 0,
+                compressed_size: 0,
+                status: Err(format!("创建输出目录失败: {}", e)),
+                input_path: Some(path.clone()),
+                output_path: None,
+            }), Some(output_dir));
         }
 
         match imagemin_core::compress_image(
-            &path,
-            &output_dir,
-            &config.quality,
-            config.png_lossless,
-            config.output_format,
-            config.max_width,
-            config.max_height,
+            &path, &output_dir, &config.quality, config.png_lossless,
+            config.output_format, config.max_width, config.max_height,
             config.strip_metadata,
-        )
-        {
+        ) {
             Ok(result) => {
-                let output_parent = result
-                    .output_path
-                    .parent()
-                    .map(Path::to_path_buf)
+                let output_parent = result.output_path.parent().map(Path::to_path_buf)
                     .unwrap_or_else(|| output_dir.clone());
                 let row = result_table::Row {
                     name: result.name,
@@ -752,7 +742,29 @@ async fn compress_single(
                 (Some(row), Some(output_dir))
             }
         }
-    })
+        })); // 关闭 catch_unwind
+
+        // catch_unwind 失败时返回 panic 信息
+        match inner {
+            Ok(r) => r,
+            Err(panic) => {
+                let msg = if let Some(s) = panic.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "压缩线程发生未知 panic".to_string()
+                };
+                (Some(result_table::Row {
+                    name: fallback_name2,
+                    original_size: 0, compressed_size: 0,
+                    status: Err(format!("压缩线程崩溃: {}", msg)),
+                    input_path: Some(panic_path),
+                    output_path: None,
+                }), Some(output_dir2))
+            }
+        }
+    }) // 关闭 spawn_blocking
     .await
     .unwrap_or_else(|e| {
         (

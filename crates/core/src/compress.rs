@@ -207,6 +207,7 @@ fn compress_gif(input: &[u8], quality: u8) -> Result<Vec<u8>, CompressError> {
 
     // 多帧动画先保持原样，避免破坏动画。
     if frames.len() != 1 {
+        eprintln!("compress_gif: 多帧 GIF（{} 帧），保持原始数据", frames.len());
         return Ok(input.to_vec());
     }
 

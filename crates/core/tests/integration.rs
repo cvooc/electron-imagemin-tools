@@ -403,11 +403,13 @@ png = 80
 
 #[test]
 fn test_quality_boundary_values() {
-    let q_min = Quality { jpeg: 0, png: 0 };
+    let q_min = Quality { jpeg: 5, png: 10 };
     let q_max = Quality { jpeg: 100, png: 100 };
 
     assert!(q_min.validate().is_ok());
     assert!(q_max.validate().is_ok());
+    // quality=0 现在是非法的（低于下限）
+    assert!(Quality { jpeg: 0, png: 0 }.validate().is_err());
 }
 
 #[test]
