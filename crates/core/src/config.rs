@@ -1,6 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+/// 支持的图片格式扩展名列表（小写，不含前导点）。
+pub const SUPPORTED_EXTENSIONS: &[&str] = &[
+    "jpg", "jpeg", "png", "gif", "svg", "webp", "avif",
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OutputMode {
@@ -46,7 +51,7 @@ pub enum OutputFormat {
     Jpeg,
     /// 转为 PNG
     Png,
-    /// 转为 WebP（暂未实现编码，保留选项）
+    /// 转为 WebP
     WebP,
     /// 转为 AVIF
     Avif,
@@ -161,7 +166,7 @@ impl Config {
     /// 根据配置和输入文件路径计算最终输出目录。
     ///
     /// - `Timestamped`：在基础输出目录下创建时间戳子目录。
-    /// - `SameDir`：返回输入文件所在目录（批量压缩时以第一个文件为准）。
+    /// - `SameDir`：返回输入文件所在目录。
     /// - `Custom`：返回用户自定义目录，若未设置则回退到 `Timestamped`。
     pub fn resolve_output_dir(&self, input_path: Option<&Path>) -> PathBuf {
         match self.output_mode {

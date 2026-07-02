@@ -96,7 +96,7 @@ pub fn view(config: &Config) -> Element<'static, Message> {
     let about_card = card_container(column![
         section_title("关于"),
         text(format!("版本: {}", version)),
-        text("GITHUB: https://github.com/ShowMeBaby/electron-imagemin-tools"),
+        text("GITHUB: https://github.com/cvooc/electron-imagemin-tools"),
     ].spacing(8));
 
     let content = column![

@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::views::{drop_zone, emoji_test, error_log, header, history, modal, progress, result_table, settings, stack, toast};
 use crate::theme;
-use imagemin_core::{Config, History, HistoryEntry, OutputMode, ThemeMode};
+use imagemin_core::{Config, History, HistoryEntry, OutputMode, ThemeMode, SUPPORTED_EXTENSIONS};
 
 #[derive(Debug, Clone)]
 pub enum AppState {
@@ -139,15 +139,10 @@ impl Application for App {
             Some(Message::KeyPressed(key, modifiers))
         });
 
-        let mut subs = vec![file_events, keyboard];
+        let subs = vec![file_events, keyboard];
 
-        // Toast 自动消失定时器
-        if self.toast.is_some() {
-            subs.push(
-                iced::time::every(std::time::Duration::from_secs(3))
-                    .map(|_| Message::ToastTimeout),
-            );
-        }
+        // Toast 自动消失不再使用 subscription，改用 Command::perform（见 update）
+        // 避免每 3 秒重复触发的 bug
 
         Subscription::batch(subs)
     }
@@ -199,7 +194,7 @@ impl Application for App {
                 window::minimize(window::Id::MAIN, true)
             }
             Message::Header(header::Message::Close) => {
-                std::process::exit(0);
+                window::close(window::Id::MAIN)
             }
             Message::Header(header::Message::Drag) => window::drag(window::Id::MAIN),
             Message::DropZone(drop_zone::Message::SelectFiles) => {
@@ -231,7 +226,7 @@ impl Application for App {
                         .and_then(|e| e.to_str())
                         .unwrap_or("")
                         .to_lowercase();
-                    if matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "gif" | "svg" | "webp") {
+                    if SUPPORTED_EXTENSIONS.contains(&ext.as_str()) {
                         vec![path]
                     } else {
                         Vec::new()
@@ -311,7 +306,7 @@ impl Application for App {
                     } else {
                         self.toast = Some(toast::Toast::info("压缩完成".to_string()));
                     }
-                    Command::none()
+                    toast_timeout()
                 }
             }
             Message::CancelCompression => {
@@ -321,7 +316,7 @@ impl Application for App {
                 self.cancel_flag = None;
                 self.state = AppState::Idle;
                 self.toast = Some(toast::Toast::info("压缩已取消"));
-                Command::none()
+                toast_timeout()
             }
             Message::History(history::Message::Back) => {
                 self.state = AppState::Idle;
@@ -344,7 +339,7 @@ impl Application for App {
                     .join("\n");
                 if log_text.is_empty() {
                     self.toast = Some(toast::Toast::info("暂无失败日志"));
-                    Command::none()
+                    toast_timeout()
                 } else {
                     self.toast = Some(toast::Toast::success("日志已复制到剪贴板"));
                     iced::clipboard::write(log_text)
@@ -353,7 +348,7 @@ impl Application for App {
             Message::ErrorLog(error_log::Message::ClearLog) => {
                 self.logs.clear();
                 self.toast = Some(toast::Toast::info("日志已清空"));
-                Command::none()
+                toast_timeout()
             }
             Message::EmojiTest(emoji_test::Message::Back) => {
                 self.state = AppState::Idle;
@@ -399,7 +394,7 @@ impl Application for App {
                 self.output_dir = None;
                 self.state = AppState::Idle;
                 self.toast = Some(toast::Toast::info("列表已清空"));
-                Command::none()
+                toast_timeout()
             }
             Message::CancelClear => {
                 self.show_clear_modal = false;
@@ -447,8 +442,11 @@ impl Application for App {
                 match (key, ctrl) {
                     // Escape: 返回主界面
                     (Key::Named(iced::keyboard::key::Named::Escape), _) => {
-                        if matches!(self.state, AppState::Settings) {
-                            self.state = AppState::Idle;
+                        match self.state {
+                            AppState::Settings | AppState::History | AppState::ErrorLog | AppState::EmojiTest => {
+                                self.state = AppState::Idle;
+                            }
+                            _ => {}
                         }
                         Command::none()
                     }
@@ -575,9 +573,18 @@ impl App {
     }
 }
 
+fn toast_timeout() -> Command<Message> {
+    Command::perform(
+        async move {
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        },
+        |_| Message::ToastTimeout,
+    )
+}
+
 async fn select_files() -> Vec<PathBuf> {
     let files = rfd::AsyncFileDialog::new()
-        .add_filter("Images", &["jpg", "jpeg", "png", "gif", "svg", "webp"])
+        .add_filter("Images", SUPPORTED_EXTENSIONS)
         .pick_files()
         .await;
 
@@ -604,15 +611,29 @@ fn resolve_output_dir(config: &Config, path: &Path) -> PathBuf {
     }
 }
 
-/// 递归扫描目录中的图片文件。
+/// 递归扫描目录中的图片文件。最多递归 10 层，最多收集 10000 个文件。
 fn collect_images_from_dir(dir: &Path) -> Vec<PathBuf> {
+    collect_images_from_dir_depth(dir, 0)
+}
+
+fn collect_images_from_dir_depth(dir: &Path, depth: u32) -> Vec<PathBuf> {
+    const MAX_DEPTH: u32 = 10;
+    const MAX_FILES: usize = 10000;
+
+    if depth > MAX_DEPTH {
+        return Vec::new();
+    }
+
     let mut files = Vec::new();
-    let supported = ["jpg", "jpeg", "png", "gif", "svg", "webp"];
+    let supported = SUPPORTED_EXTENSIONS;
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
+            if files.len() >= MAX_FILES {
+                break;
+            }
             let path = entry.path();
             if path.is_dir() {
-                files.extend(collect_images_from_dir(&path));
+                files.extend(collect_images_from_dir_depth(&path, depth + 1));
             } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                 if supported.contains(&ext.to_lowercase().as_str()) {
                     files.push(path);

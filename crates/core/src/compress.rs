@@ -262,6 +262,9 @@ fn compress_gif(input: &[u8], quality: u8) -> Result<Vec<u8>, CompressError> {
     }
 }
 
+/// SVG 光栅化最大尺寸（像素），防止恶意超大 SVG 导致 OOM。
+const MAX_SVG_DIMENSION: u32 = 4096;
+
 /// 将 SVG 光栅化为 PNG 后压缩。输出格式从 .svg 变为 .png。
 fn compress_svg(input: &[u8], quality: u8) -> Result<Vec<u8>, CompressError> {
     let svg_str = std::str::from_utf8(input)
@@ -272,15 +275,25 @@ fn compress_svg(input: &[u8], quality: u8) -> Result<Vec<u8>, CompressError> {
         .map_err(|e| CompressError::Image(format!("解析 SVG 失败: {}", e)))?;
 
     let pixmap_size = tree.size().to_int_size();
-    let mut pixmap = tiny_skia::Pixmap::new(pixmap_size.width(), pixmap_size.height())
+    let w = pixmap_size.width().min(MAX_SVG_DIMENSION);
+    let h = pixmap_size.height().min(MAX_SVG_DIMENSION);
+
+    // 如果 SVG 尺寸超出上限，处理为 1x1（由用户 resize 决定，而非 OOM）
+    let (width, height) = if w == 0 || h == 0 {
+        (1u32, 1u32)
+    } else {
+        (w, h)
+    };
+
+    let mut pixmap = tiny_skia::Pixmap::new(width, height)
         .ok_or_else(|| CompressError::Image("无法创建 SVG 渲染缓冲区".to_string()))?;
     pixmap.fill(tiny_skia::Color::from_rgba8(255, 255, 255, 0));
 
     resvg::render(&tree, tiny_skia::Transform::default(), &mut pixmap.as_mut());
 
     let rgba = image::RgbaImage::from_raw(
-        pixmap_size.width(),
-        pixmap_size.height(),
+        width,
+        height,
         pixmap.data().to_vec(),
     )
     .ok_or_else(|| CompressError::Image("SVG 渲染结果尺寸不匹配".to_string()))?;
@@ -506,6 +519,23 @@ pub fn compress_image(
 
     let output_path = output_dir.join(&output_filename);
     std::fs::create_dir_all(output_dir)?;
+
+    // 若输出文件已存在，自动追加编号避免覆盖
+    let output_path = if output_path.exists() {
+        let stem = output_path.file_stem().and_then(|s| s.to_str()).unwrap_or("file");
+        let ext = output_path.extension().and_then(|s| s.to_str()).unwrap_or("");
+        let mut counter = 1;
+        loop {
+            let candidate = output_dir.join(format!("{}_{}.{}", stem, counter, ext));
+            if !candidate.exists() {
+                break candidate;
+            }
+            counter += 1;
+        }
+    } else {
+        output_path
+    };
+
     std::fs::write(&output_path, &compressed)?;
 
     Ok(CompressResult {
