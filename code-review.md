@@ -24,20 +24,20 @@
 | C01 | Core质量 | `compress_image()` 参数过多（9个参数） | 🟡 中 | 建议引入 `CompressOptions` struct 聚合参数，提高可维护性 | | |
 | C02 | Core质量 | `compress_original()` 中对 WebP 的特殊命名逻辑耦合 | 🟡 中 | 已添加 `-lossless.webp` 命名约定注释说明 | | 是 |
 | C03 | Core质量 | `compress_png()` 中的双重解码 | 🟡 中 | 先 `oxipng::optimize_from_memory`，失败后又用 `image::load_from_memory`，两个路径都对内存进行完整读取和解析，可以考虑优化为单一解码路径 | | |
-| C04 | Core质量 | GIF 多帧动画直接返回原数据但无日志 | 🟢 低 | 注释说明"避免破坏动画"是合理策略，但应记录日志告知用户未压缩 | | |
+| C04 | Core质量 | GIF 多帧动画直接返回原数据但无日志 | 🟢 低 | 已添加 eprintln 日志告知用户未压缩 | | 是 |
 | C05 | Core质量 | 双重并行可能过度竞争 CPU | 🟡 中 | 已添加注释说明 tokio + rayon 两层并行是合理设计 | | 是 |
 | C06 | Core质量 | `strip_metadata_from_png()` 与 `compress_png_raw()` 中的 oxipng 调用重复 | 🟡 中 | `quantize_to_indexed_png` 默认使用 `StripChunks::Safe`，移除重复 oxipng 调用 | | 是 |
 | **C07** | **Core质量** | **`OutputFormat::WebP` 注释与实现不符** | **🔴 高** | 已修正 config.rs 中"暂未实现编码"注释 | | 是 |
 | C08 | Core质量 | 缺少配置迁移/版本机制 | 🟡 中 | 未来新增配置字段时，`toml::from_str` 能兼容默认值，但如果做结构性变更（如重命名字段），需要版本号支持迁移 | 是 | |
 | C09 | Core质量 | `resolve_output_dir` 的过时注释 | 🟡 中 | 已删除"以第一个文件为准"过时注释 | | 是 |
-| C10 | Core质量 | `max_width` / `max_height` 配置有字段但 Settings UI 未暴露 | 🟢 低 | 配置层已支持但 UI 设置页缺少对应的输入框 | | |
-| C11 | Core质量 | `strip_metadata` 配置层支持但 Settings UI 未暴露 | 🟢 低 | 同上 | | |
-| C12 | Core质量 | `output_format` 配置已支持但 Settings UI 未暴露 | 🟢 低 | 用户无法在设置页选择输出格式 | | |
+| C10 | Core质量 | `max_width` / `max_height` 配置有字段但 Settings UI 未暴露 | 🟢 低 | 设置页已添加最大宽/高输入框 | | 是 |
+| C11 | Core质量 | `strip_metadata` 配置层支持但 Settings UI 未暴露 | 🟢 低 | 设置页已添加复选框 | | 是 |
+| C12 | Core质量 | `output_format` 配置已支持但 Settings UI 未暴露 | 🟢 低 | 设置页已添加格式选择按钮 | | 是 |
 | C13 | Core质量 | `add()` 删除策略不合理 | 🟡 中 | FIFO 按时间保留最近 100 条，策略正确；新增 `clear()` 方法 | | 是 |
 | C14 | Core质量 | 缺少历史记录导出/清空功能 | 🟢 低 | 已添加 `History::clear()` + UI 清空按钮 | | 是 |
 | C15 | Core质量 | 缺少单条历史记录删除 | 🟢 低 | 只能查看全部，无法删除单条或按时间段清理 | 是 | |
 | C16 | Core质量 | `ravif = "0.8"` 的 rav1e 在小尺寸图片上 panic | 🟡 中 | 测试已 `#[ignore]` 并标注"升级 rav1e 可修复" | | 是 |
-| C17 | Core质量 | `webp = "0.3"` 版本较旧 | 🟢 低 | 可评估升级到 0.4+ 获取更好的编码性能 | | |
+| C17 | Core质量 | `webp = "0.3"` 版本较旧 | 🟢 低 | 0.4 不存在于 registry，保持 0.3.1 | | 是 |
 | C18 | Core质量 | SVG 光栅化尺寸无上限 | 🔴 高 | 已添加 `MAX_SVG_DIMENSION = 4096` 防 OOM | | 是 |
 | C19 | Core质量 | AVIF 编码无尺寸保护 | 🟡 中 | `ravif::encode_rgba` 在超大图片上同样可能 OOM，且 `speed: 4` 在慢速模式下内存占用更高。建议大图片（>16MP）降级处理 | | |
 | C20 | Core质量 | `collect_images_from_dir()` 递归无深度限制 | 🟡 中 | 已添加 MAX_DEPTH=10、MAX_FILES=10000 限制 | | 是 |
@@ -46,7 +46,7 @@
 | C23 | Core质量 | `spawn_blocking` 内 panic 无保护 | 🟢 低 | 已添加 `std::panic::catch_unwind` 保护 | | 是 |
 | C24 | Core质量 | `Quality::validate()` 允许 quality=0 | 🟢 低 | 已设下限：JPEG=5, PNG=10 | | 是 |
 | C25 | Core质量 | `SameDir` 模式在根路径时行为异常 | 🟢 低 | 根路径 `/` 和 `\\` 时回退到 base_output_dir | | 是 |
-| C26 | Core质量 | `CompressResult` 缺少校验和 | 🟢 低 | 无法验证输出文件完整性。建议添加 xxhash 等校验和字段 | | |
+| C26 | Core质量 | `CompressResult` 缺少校验和 | 🟢 低 | 已添加 `checksum` (CRC32) 字段 | | 是 |
 | C27 | Core质量 | 格式列表多处重复维护 | 🟡 中 | 已定义 `SUPPORTED_EXTENSIONS` 全局常量统一引用 | | 是 |
 | C28 | Core质量 | `compress_original()` 与 `compress_image()` 的格式分发逻辑重复 | 🟡 中 | 两者都根据格式选择压缩方法，但结构不统一。建议将 format→compressor 映射抽象为统一入口 | | |
 | C29 | Core质量 | JPEG/PNG quality 语义不一致 | 🟢 低 | JPEG quality 映射编码器质量，PNG quality 映射 imagequant 质量，用户可能认为两者效果等价。应在 UI 添加格式说明 | | |
@@ -56,7 +56,7 @@
 | C33 | Core质量 | `assets/test.png`（448KB）被打包进发布版 | 🟡 中 | 测试图片不应随发布版分发。应移到 `tests/fixtures/` 或在 `Cargo.toml` 中排除 | | |
 | C34 | Core质量 | 完全缺少日志系统 | 🟡 中 | 除 UI 错误日志外无运行时日志，调试困难。建议引入 `tracing` 或 `log` crate 记录压缩参数、耗时、格式选择等 | | |
 | C35 | Core质量 | 无压缩耗时统计 | 🟢 低 | `CompressResult` 应添加 `elapsed_ms` 字段，让用户和开发者了解压缩耗时 | | |
-| C36 | Core质量 | 压缩后文件变大时无明确提示 | 🟢 低 | 已是最优的 PNG 再量化后变大时，仅在结果中显示负数节省，无"已是最优，无需压缩"提示 | | |
+| C36 | Core质量 | 压缩后文件变大时无明确提示 | 🟢 低 | 已添加 `note` 字段，变大时标记"已是最优，无需压缩" | | 是 |
 | C37 | Core质量 | `FileDropped` 中 AVIF 扩展名过滤遗漏 | 🟡 中 | 三处过滤列表均已添加 `avif` | | 是 |
 | C38 | Core质量 | `collect_images_from_dir()` 格式列表不含 AVIF | 🟡 中 | 同上 | | 是 |
 | **U01** | **UI质量** | **`start_compression()` 高并发问题** | **🔴 高** | 已添加 `tokio::sync::Semaphore(4)` 限制最多 4 个并行任务 | | 是 |
