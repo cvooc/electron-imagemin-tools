@@ -41,8 +41,10 @@ fn row_bg_style(is_ok: bool) -> impl Fn(&iced::Theme) -> iced::widget::container
     }
 }
 
+
+
 pub fn view(results: &[Row], has_output_dir: bool) -> Element<'static, Message> {
-    let header = row![
+    let header = container(row![
         text("图片名").shaping(Shaping::Advanced).width(Length::FillPortion(3)),
         text("原图大小").shaping(Shaping::Advanced).width(Length::FillPortion(1)),
         text("压缩后大小").shaping(Shaping::Advanced).width(Length::FillPortion(1)),
@@ -51,7 +53,7 @@ pub fn view(results: &[Row], has_output_dir: bool) -> Element<'static, Message> 
         text("压缩率").shaping(Shaping::Advanced).width(Length::FillPortion(1)),
         text("操作").shaping(Shaping::Advanced).width(Length::FillPortion(1)),
     ]
-    .padding(8);
+    .padding(8)).padding([0, 0, 4, 0]);
 
     let mut rows = column![header];
 

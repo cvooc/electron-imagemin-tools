@@ -16,6 +16,18 @@ pub enum CompressError {
 }
 
 #[derive(Debug, Clone)]
+pub struct CompressOptions {
+    pub input_path: PathBuf,
+    pub output_dir: PathBuf,
+    pub quality: super::config::Quality,
+    pub png_lossless: bool,
+    pub output_format: super::config::OutputFormat,
+    pub max_width: Option<u32>,
+    pub max_height: Option<u32>,
+    pub strip_metadata: bool,
+    pub resize_filter: String,
+}
+
 pub struct CompressResult {
     pub name: String,
     pub original_size: u64,
