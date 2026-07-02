@@ -8,15 +8,20 @@ pub enum Message {
     SelectFiles,
 }
 
-fn drop_zone_style(_theme: &Theme) -> container::Appearance {
+fn drop_zone_style(theme: &Theme) -> container::Appearance {
+    let is_dark = matches!(theme, Theme::Dark | Theme::CatppuccinMocha | Theme::TokyoNight | Theme::Dracula | Theme::Nord);
     container::Appearance {
-        background: Some(Background::Color(Color::from_rgb(0.96, 0.96, 0.97))),
+        background: Some(Background::Color(if is_dark {
+            Color::from_rgb(0.15, 0.15, 0.16)
+        } else {
+            Color::from_rgb(0.96, 0.96, 0.97)
+        })),
         border: Border {
-            color: Color::from_rgb(0.7, 0.7, 0.7),
+            color: if is_dark { Color::from_rgb(0.3, 0.3, 0.3) } else { Color::from_rgb(0.7, 0.7, 0.7) },
             width: 2.0,
             radius: theme::RADIUS_LARGE.into(),
         },
-        text_color: Some(Color::from_rgb(0.4, 0.4, 0.4)),
+        text_color: Some(if is_dark { Color::from_rgb(0.7, 0.7, 0.7) } else { Color::from_rgb(0.4, 0.4, 0.4) }),
         ..Default::default()
     }
 }

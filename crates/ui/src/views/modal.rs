@@ -14,9 +14,10 @@ pub struct Modal<M: Clone> {
     pub on_cancel: M,
 }
 
-fn card_style(_theme: &iced::Theme) -> container::Appearance {
+fn card_style(theme: &iced::Theme) -> container::Appearance {
+    let is_dark = matches!(theme, iced::Theme::Dark | iced::Theme::CatppuccinMocha | iced::Theme::TokyoNight | iced::Theme::Dracula | iced::Theme::Nord);
     container::Appearance {
-        background: Some(Background::Color(Color::WHITE)),
+        background: Some(Background::Color(if is_dark { Color::from_rgb(0.2, 0.2, 0.22) } else { Color::WHITE })),
         border: Border {
             radius: 8.0.into(),
             ..Default::default()

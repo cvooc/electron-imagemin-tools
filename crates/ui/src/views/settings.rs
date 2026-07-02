@@ -19,9 +19,14 @@ pub enum Message {
     OutputFormatChanged(OutputFormat),
 }
 
-fn card_style(_theme: &iced::Theme) -> container::Appearance {
+fn card_style(theme: &iced::Theme) -> container::Appearance {
+    let is_dark = matches!(theme, iced::Theme::Dark | iced::Theme::CatppuccinMocha | iced::Theme::TokyoNight | iced::Theme::Dracula | iced::Theme::Nord);
     container::Appearance {
-        background: Some(iced::Background::Color(iced::Color::WHITE)),
+        background: Some(iced::Background::Color(if is_dark {
+            iced::Color::from_rgb(0.2, 0.2, 0.22)
+        } else {
+            iced::Color::WHITE
+        })),
         border: iced::Border { radius: 8.0.into(), ..Default::default() },
         shadow: theme::shadow_card(),
         ..Default::default()
