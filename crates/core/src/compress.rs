@@ -579,6 +579,8 @@ fn change_extension(filename: &str, new_ext: &str) -> String {
     format!("{}.{}", stem, new_ext)
 }
 
+/// 批量压缩：使用 rayon 并行处理多个文件。
+/// 注意：调用方已通过 tokio::spawn_blocking 执行，内部再用 rayon 是合理的两层并行设计。
 pub fn compress_images(
     input_paths: &[PathBuf],
     output_dir: &Path,

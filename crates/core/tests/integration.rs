@@ -56,6 +56,17 @@ fn create_svg(path: &PathBuf) {
     std::fs::write(path, svg_content).unwrap();
 }
 
+fn create_test_webp(path: &PathBuf) {
+    use image::{ImageBuffer, Rgb};
+    let img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_fn(100, 100, |x, y| {
+        Rgb([((x + y) % 256) as u8, 128, 64])
+    });
+    let (w, h) = img.dimensions();
+    let encoder = webp::Encoder::from_rgb(img.as_raw(), w, h);
+    let encoded = encoder.encode(80.0);
+    std::fs::write(path, &*encoded).unwrap();
+}
+
 // ==================== 压缩功能测试 ====================
 
 #[test]
@@ -552,10 +563,42 @@ fn test_output_mode_same_dir_creates_file_in_input_dir() {
     assert_eq!(result.output_path.parent().unwrap(), temp.path());
 }
 
+// ==================== WebP 输入压缩测试 ====================
+
+#[test]
+fn test_compress_webp_as_input_original() {
+    let temp = TempDir::new().unwrap();
+    let input_path = temp.path().join("test.webp");
+    create_test_webp(&input_path);
+
+    let output_dir = temp.path().join("output");
+    let quality = Quality::default();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
+
+    assert_eq!(result.name, "test.jpg");
+    assert!(result.compressed_size > 0);
+    assert!(result.output_path.exists());
+}
+
+#[test]
+fn test_compress_webp_as_input_lossless_naming() {
+    let temp = TempDir::new().unwrap();
+    let input_path = temp.path().join("photo-lossless.webp");
+    create_test_webp(&input_path);
+
+    let output_dir = temp.path().join("output");
+    let quality = Quality::default();
+    let result = compress_image(&input_path, &output_dir, &quality, false, OutputFormat::Original, None, None, false).unwrap();
+
+    assert_eq!(result.name, "photo-lossless.webp");
+    assert!(result.compressed_size > 0);
+    assert!(result.output_path.exists());
+}
+
 // ==================== AVIF 输出测试 ====================
 
 #[test]
-#[ignore = "rav1e 0.6.3 panics on small dimensions; upgrade rav1e to fix"]
+#[ignore = "rav1e 0.6.3 abort() panic; 升级 rav1e 可修复"]
 fn test_compress_to_avif() {
     let temp = TempDir::new().unwrap();
     let input_path = temp.path().join("test.png");
