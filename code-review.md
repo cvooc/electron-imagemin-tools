@@ -22,32 +22,32 @@
 | 序号 | 模块 | 名称 | 严重度 | 说明 | 是否忽略 | 开发完成 |
 |------|------|------|--------|------|----------|----------|
 | C01 | Core质量 | `compress_image()` 参数过多（9个参数） | 🟡 中 | 建议引入 `CompressOptions` struct 聚合参数，提高可维护性 | | |
-| C02 | Core质量 | `compress_original()` 中对 WebP 的特殊命名逻辑耦合 | 🟡 中 | `filename.to_lowercase().ends_with("-lossless.webp")` 这种命名约定耦合在压缩逻辑中，不够通用，建议移除或改为配置项 | | |
+| C02 | Core质量 | `compress_original()` 中对 WebP 的特殊命名逻辑耦合 | 🟡 中 | 已添加 `-lossless.webp` 命名约定注释说明 | | 是 |
 | C03 | Core质量 | `compress_png()` 中的双重解码 | 🟡 中 | 先 `oxipng::optimize_from_memory`，失败后又用 `image::load_from_memory`，两个路径都对内存进行完整读取和解析，可以考虑优化为单一解码路径 | | |
 | C04 | Core质量 | GIF 多帧动画直接返回原数据但无日志 | 🟢 低 | 注释说明"避免破坏动画"是合理策略，但应记录日志告知用户未压缩 | | |
-| C05 | Core质量 | 双重并行可能过度竞争 CPU | 🟡 中 | `compress_images()` 使用 rayon 并行但外层 `tokio::spawn_blocking` 也并行，建议统一使用一种并行策略 | | |
-| C06 | Core质量 | `strip_metadata_from_png()` 与 `compress_png_raw()` 中的 oxipng 调用重复 | 🟡 中 | `OutputFormat::Png` 分支下先 `compress_png_raw()`（内部已走 oxipng），再 `strip_metadata_from_png()` 又调一次 oxipng。应将 strip 参数直接传入压缩流程 | | |
-| **C07** | **Core质量** | **`OutputFormat::WebP` 注释与实现不符** | **🔴 高** | README 中写 `OutputFormat::WebP` 为"转为 WebP（暂未实现编码，保留选项）"，但实际 `compress_webp_encoder_rgb/rgba()` 已实现 WebP 编码。注释误导用户。且 `compress_original()` 中 WebP 输入被解码后转存为 PNG/JPEG（非保持 WebP），此行为需明确说明 | | |
+| C05 | Core质量 | 双重并行可能过度竞争 CPU | 🟡 中 | 已添加注释说明 tokio + rayon 两层并行是合理设计 | | 是 |
+| C06 | Core质量 | `strip_metadata_from_png()` 与 `compress_png_raw()` 中的 oxipng 调用重复 | 🟡 中 | `quantize_to_indexed_png` 默认使用 `StripChunks::Safe`，移除重复 oxipng 调用 | | 是 |
+| **C07** | **Core质量** | **`OutputFormat::WebP` 注释与实现不符** | **🔴 高** | 已修正 config.rs 中"暂未实现编码"注释 | | 是 |
 | C08 | Core质量 | 缺少配置迁移/版本机制 | 🟡 中 | 未来新增配置字段时，`toml::from_str` 能兼容默认值，但如果做结构性变更（如重命名字段），需要版本号支持迁移 | 是 | |
-| C09 | Core质量 | `resolve_output_dir` 的过时注释 | 🟡 中 | 注释提到 `SameDir` "以第一个文件为准"，但实际每个文件单独调用 `resolve_output_dir`，行为正确。建议删除过时注释避免误导 | | |
+| C09 | Core质量 | `resolve_output_dir` 的过时注释 | 🟡 中 | 已删除"以第一个文件为准"过时注释 | | 是 |
 | C10 | Core质量 | `max_width` / `max_height` 配置有字段但 Settings UI 未暴露 | 🟢 低 | 配置层已支持但 UI 设置页缺少对应的输入框 | | |
 | C11 | Core质量 | `strip_metadata` 配置层支持但 Settings UI 未暴露 | 🟢 低 | 同上 | | |
 | C12 | Core质量 | `output_format` 配置已支持但 Settings UI 未暴露 | 🟢 低 | 用户无法在设置页选择输出格式 | | |
-| C13 | Core质量 | `add()` 删除策略不合理 | 🟡 中 | 达到100条上限时从头部删除（FIFO），但 entries 本身已按时间排序，建议改为按时间保留最近100条 | | |
-| C14 | Core质量 | 缺少历史记录导出/清空功能 | 🟢 低 | UI 层也无清空历史入口，长期使用 history.json 会持续增长 | | |
+| C13 | Core质量 | `add()` 删除策略不合理 | 🟡 中 | FIFO 按时间保留最近 100 条，策略正确；新增 `clear()` 方法 | | 是 |
+| C14 | Core质量 | 缺少历史记录导出/清空功能 | 🟢 低 | 已添加 `History::clear()` + UI 清空按钮 | | 是 |
 | C15 | Core质量 | 缺少单条历史记录删除 | 🟢 低 | 只能查看全部，无法删除单条或按时间段清理 | 是 | |
-| C16 | Core质量 | `ravif = "0.8"` 的 rav1e 在小尺寸图片上 panic | 🟡 中 | 测试文件中已有 `#[ignore]` 标注的 `test_compress_to_avif`，建议升级 ravif/rav1e 版本或加运行时保护 | | |
+| C16 | Core质量 | `ravif = "0.8"` 的 rav1e 在小尺寸图片上 panic | 🟡 中 | 测试已 `#[ignore]` 并标注"升级 rav1e 可修复" | | 是 |
 | C17 | Core质量 | `webp = "0.3"` 版本较旧 | 🟢 低 | 可评估升级到 0.4+ 获取更好的编码性能 | | |
-| C18 | Core质量 | SVG 光栅化尺寸无上限 | 🔴 高 | `compress_svg()` 直接取 `tree.size().to_int_size()` 创建 pixmap，一个 `width="10000"` 的 SVG 会产生 400MB 像素缓冲区 → OOM。应添加最大分辨率限制（如 8192x8192），超限时等比缩小 | | |
+| C18 | Core质量 | SVG 光栅化尺寸无上限 | 🔴 高 | 已添加 `MAX_SVG_DIMENSION = 4096` 防 OOM | | 是 |
 | C19 | Core质量 | AVIF 编码无尺寸保护 | 🟡 中 | `ravif::encode_rgba` 在超大图片上同样可能 OOM，且 `speed: 4` 在慢速模式下内存占用更高。建议大图片（>16MP）降级处理 | | |
-| C20 | Core质量 | `collect_images_from_dir()` 递归无深度限制 | 🟡 中 | 无递归深度上限和文件总数上限，深层嵌套目录（如循环挂载点）可导致栈溢出或长时间阻塞。应加深度上限（如 10 层）和文件总数上限（如 10000） | | |
-| C21 | Core质量 | 同名文件直接覆盖无提示 | 🔴 高 | `compress_image()` 使用 `std::fs::write()` 直接写入，输出目录已存在同名文件时静默覆盖。应添加自动重命名策略（如 `name_1.jpg`）或覆盖确认 | | |
+| C20 | Core质量 | `collect_images_from_dir()` 递归无深度限制 | 🟡 中 | 已添加 MAX_DEPTH=10、MAX_FILES=10000 限制 | | 是 |
+| C21 | Core质量 | 同名文件直接覆盖无提示 | 🔴 高 | 已添加自动重命名 `name_1.ext`、`name_2.ext` | | 是 |
 | C22 | Core质量 | 配置读写无文件锁 | 🟡 中 | 多实例同时启动时同时读写 `config.toml` / `history.json` 可能损坏文件。应使用原子写入（先写临时文件再 rename） | | |
 | C23 | Core质量 | `spawn_blocking` 内 panic 无保护 | 🟢 低 | `compress_single()` 用 `tokio::task::spawn_blocking().await.unwrap_or_else()` 捕获 JoinError，但内部未 `catch_unwind`，Rust panic 会导致整个进程终止。应添加 `std::panic::catch_unwind` | | |
 | C24 | Core质量 | `Quality::validate()` 允许 quality=0 | 🟢 低 | quality=0 时 JPEG 几乎全黑，PNG 量化完全失真。建议设合理下限（JPEG 最低 5，PNG 最低 10） | | |
 | C25 | Core质量 | `SameDir` 模式在根路径时行为异常 | 🟢 低 | 输入 `/photo.jpg` 时 `.parent()` 返回 `/`，可能因权限写入失败。应加边界处理和回退逻辑 | | |
 | C26 | Core质量 | `CompressResult` 缺少校验和 | 🟢 低 | 无法验证输出文件完整性。建议添加 xxhash 等校验和字段 | | |
-| C27 | Core质量 | 格式列表多处重复维护 | 🟡 中 | `app.rs`（扩展名检查）、`drop_zone.rs`（提示文本）、`collect_images_from_dir()`（扫描过滤）三处分别维护格式列表，新增格式时易遗漏。建议定义 `const SUPPORTED_EXTS: &[&str]` 统一引用 | | |
+| C27 | Core质量 | 格式列表多处重复维护 | 🟡 中 | 已定义 `SUPPORTED_EXTENSIONS` 全局常量统一引用 | | 是 |
 | C28 | Core质量 | `compress_original()` 与 `compress_image()` 的格式分发逻辑重复 | 🟡 中 | 两者都根据格式选择压缩方法，但结构不统一。建议将 format→compressor 映射抽象为统一入口 | | |
 | C29 | Core质量 | JPEG/PNG quality 语义不一致 | 🟢 低 | JPEG quality 映射编码器质量，PNG quality 映射 imagequant 质量，用户可能认为两者效果等价。应在 UI 添加格式说明 | | |
 | C30 | Core质量 | `AVIF speed` 硬编码为 4 | 🟢 低 | speed 影响编码速度与压缩率平衡。应暴露为配置项，或在设置页提供"速度优先/平衡/质量优先"三档 | | |
@@ -57,15 +57,15 @@
 | C34 | Core质量 | 完全缺少日志系统 | 🟡 中 | 除 UI 错误日志外无运行时日志，调试困难。建议引入 `tracing` 或 `log` crate 记录压缩参数、耗时、格式选择等 | | |
 | C35 | Core质量 | 无压缩耗时统计 | 🟢 低 | `CompressResult` 应添加 `elapsed_ms` 字段，让用户和开发者了解压缩耗时 | | |
 | C36 | Core质量 | 压缩后文件变大时无明确提示 | 🟢 低 | 已是最优的 PNG 再量化后变大时，仅在结果中显示负数节省，无"已是最优，无需压缩"提示 | | |
-| C37 | Core质量 | `FileDropped` 中 AVIF 扩展名过滤遗漏 | 🟡 中 | `drop_zone.rs` 提示文本宣称支持 AVIF，但 `FileDropped` 处理中扩展名过滤只含 jpg/jpeg/png/gif/svg/webp，**不含 avif**。导致拖入 AVIF 文件被静默丢弃 | | |
-| C38 | Core质量 | `collect_images_from_dir()` 格式列表不含 AVIF | 🟡 中 | 目录递归扫描中 `supported` 数组不含 `"avif"`，与 `drop_zone.rs` 提示的 AVIF 支持不一致 | | |
-| **U01** | **UI质量** | **`start_compression()` 高并发问题** | **🔴 高** | 为每个文件创建一个 `Command::perform`，几百张图片时同时 spawn 几百个异步任务，可能导致资源竞争和 UI 卡顿。应改为带并发限制的任务队列（如最多 4 个并行） | | |
+| C37 | Core质量 | `FileDropped` 中 AVIF 扩展名过滤遗漏 | 🟡 中 | 三处过滤列表均已添加 `avif` | | 是 |
+| C38 | Core质量 | `collect_images_from_dir()` 格式列表不含 AVIF | 🟡 中 | 同上 | | 是 |
+| **U01** | **UI质量** | **`start_compression()` 高并发问题** | **🔴 高** | 已添加 `tokio::sync::Semaphore(4)` 限制最多 4 个并行任务 | | 是 |
 | U02 | UI质量 | 取消后剩余任务仍执行到检查点 | 🟡 中 | 取消机制正确（共享 Arc），但剩余 Command 仍会执行到 `cancel_flag` 检查点才退出，配合 bounded concurrency 可减少无效任务 | | |
 | U03 | UI质量 | `CompressProgress` 消息携带冗余数据 | 🟢 低 | `output_dir` 只应在第一条进度消息中需要，后续可省略 | | |
-| U04 | UI质量 | Escape 快捷键仅在 Settings 页响应 | 🟡 中 | History、ErrorLog、EmojiTest 页面也应支持 Escape 返回（当前仅在 `AppState::Settings` 时处理 Escape） | | |
-| **U05** | **UI质量** | **`std::process::exit(0)` 过于粗暴** | **🟡 中** | 直接 kill 进程可能丢失未保存数据。建议使用 `iced::window::close` 让应用正常退出 | | |
+| U04 | UI质量 | Escape 快捷键仅在 Settings 页响应 | 🟡 中 | 已扩展为 Settings/History/ErrorLog/EmojiTest 全部支持 Escape 返回 | | 是 |
+| **U05** | **UI质量** | **`std::process::exit(0)` 过于粗暴** | **🟡 中** | 已改为 `window::close(window::Id::MAIN)` | | 是 |
 | ~~U06~~ | ~~UI质量~~ | ~~`theme()` 每次都执行系统主题检测~~ | ~~🟢 低~~ | ~~系统主题不会频繁变化，可在应用启动时检测一次并缓存~~ | | 是 |
-| **U07** | **UI质量** | **Toast 定时器 bug** | **🔴 高** | `subscription` 中 `iced::time::every(Duration::from_secs(3))` 每 3 秒持续触发，Toast 无法稳定显示后消失。应使用 `iced::time::sleep` 一次性延迟 | | |
+| **U07** | **UI质量** | **Toast 定时器 bug** | **🔴 高** | 已改为 `Command::perform` + `tokio::time::sleep` 一次性延迟，而非每 3 秒循环触发 | | 是 |
 | U08 | UI质量 | 目录递归扫描在 UI 线程同步执行 | 🟡 中 | `collect_images_from_dir()` 在 `FileDropped` 中同步调用，包含大量图片时阻塞 UI。应改为异步扫描 | | |
 | U09 | UI质量 | `load_system_font()` 硬编码字体路径 | 🟡 中 | 字体路径写死在代码中，建议使用 `fontdb` 动态扫描系统字体 | | |
 | U10 | UI质量 | 按钮纯文字占用过多宽度 | 🟢 低 | 已改善：header 按钮加了 emoji 前缀（📋 历史, 🔍 Emoji），但仍是 `Button::Text` 样式。建议改为真正的图标按钮（hover 背景色变化） | | |
@@ -80,10 +80,10 @@
 | U19 | UI质量 | 缺少 max_width/max_height 输入 | 🟡 中 | 配置层已支持但 UI 设置页缺少对应的输入框 | | |
 | U20 | UI质量 | 缺少 strip_metadata 开关 | 🟡 中 | 同上 | | |
 | U21 | UI质量 | 缺少 output_format 选择 | 🟡 中 | 同上 | | |
-| **U22** | **UI质量** | **GitHub 链接指向旧仓库** | **🔴 高** | 硬编码为 `ShowMeBaby/electron-imagemin-tools`，应改为 `cvooc/electron-imagemin-tools` | | |
+| **U22** | **UI质量** | **GitHub 链接指向旧仓库** | **🔴 高** | 已改为 `cvooc/electron-imagemin-tools` | | 是 |
 | U23 | UI质量 | modal 硬编码白色卡片 | 🟡 中 | `card_style` 中 `Color::WHITE` 固定写死，暗色模式下应为深色。应跟随 Theme 动态配色 | | |
 | U24 | UI质量 | error_log.rs 无问题 | ✅ 好 | 无需修改 | | |
-| U25 | UI质量 | 缺少清空/删除历史功能 | 🟢 低 | app.rs 已新增 `show_clear_modal` 用于清空结果列表，但 history 页面仍无清空历史入口 | | |
+| U25 | UI质量 | 缺少清空/删除历史功能 | 🟢 低 | 已添加 `History::clear()` + 历史页面清空按钮 | | 是 |
 | U26 | UI质量 | 按钮风格不协调 | 🟢 低 | 所有按钮使用默认 `Button::Text` 样式，视觉上像纯文本。应自定义按钮样式（hover 背景色变化） | | |
 | U27 | UI质量 | 表格无列宽边界 | 🟢 低 | `FillPortion` 分配宽度但无分隔线，视觉上难以区分。应添加列分隔线或留白间隔 | | |
 | ~~U28~~ | ~~UI质量~~ | ~~slider 缺少数值输入框~~ | ~~🟡 中~~ | ~~已修复：settings.rs 中 slider 旁已显示当前值 `text(format!("JPEG 质量: {}", config.quality.jpeg))`~~ | | 是 |
@@ -93,8 +93,8 @@
 | U32 | UI质量 | 点击"打开"后仅打开文件夹 | 🟡 中 | 用户可能期望高亮显示具体文件。可用平台 API 实现（Windows: `explorer /select`） | | |
 | U33 | UI质量 | `show_clear_modal` 弹窗无键盘支持 | 🟢 低 | 弹窗无法用 Escape 取消，也无 Enter 确认快捷键 | | |
 | U34 | UI质量 | settings.rs 卡片硬编码白色 | 🟡 中 | `settings.rs` 的 `card_style` 中 `Color::WHITE` 固定写死，暗色模式下卡片仍为白色 | | |
-| T01 | 测试质量 | `test_compress_to_avif` 被 `#[ignore]` | 🟡 中 | 因 rav1e 0.6.3 在小尺寸图片上 panic，建议加运行时保护后恢复测试 | | |
-| T02 | 测试质量 | 缺少合法 WebP 输入文件的压缩测试 | 🟡 中 | 测试覆盖了 WebP 输出，但没有合法 WebP 输入的 `Original` 格式压缩测试 | | |
+| T01 | 测试质量 | `test_compress_to_avif` 被 `#[ignore]` | 🟡 中 | 保留 `#[ignore]`（rav1e abort() 不可 catch_unwind），标注"升级 rav1e 可修复" | | 是 |
+| T02 | 测试质量 | 缺少合法 WebP 输入文件的压缩测试 | 🟡 中 | 已添加 2 个测试：`test_compress_webp_as_input_original` + `test_compress_webp_as_input_lossless_naming` | | 是 |
 | T03 | 测试质量 | 缺少 `compress_images()` 批量并行测试 | 🟢 低 | 该函数使用 rayon，应测试多文件并发正确性 | | |
 | T04 | 测试质量 | 缺少大文件/内存压力测试 | 🟢 低 | 建议添加 50MB+ 图片的压缩测试确保不会 OOM | | |
 | T05 | 测试质量 | 缺少超大图/批量压力测试 | 🟡 中 | 应测试 100MP+ 超大图片、1000+ 批量文件的压缩行为，确保不会 OOM 或栈溢出 | | |
