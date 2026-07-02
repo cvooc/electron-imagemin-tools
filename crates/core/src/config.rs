@@ -63,6 +63,11 @@ impl Default for OutputFormat {
     }
 }
 
+/// JPEG 最低质量
+const JPEG_QUALITY_MIN: u8 = 5;
+/// PNG 最低质量
+const PNG_QUALITY_MIN: u8 = 10;
+
 fn default_jpeg_quality() -> u8 {
     80
 }
@@ -87,8 +92,14 @@ impl Quality {
         if self.jpeg > 100 {
             return Err(format!("JPEG 质量必须在 0-100 之间，当前为 {}", self.jpeg));
         }
+        if self.jpeg < JPEG_QUALITY_MIN {
+            return Err(format!("JPEG 质量最低为 {}，当前为 {}", JPEG_QUALITY_MIN, self.jpeg));
+        }
         if self.png > 100 {
             return Err(format!("PNG 质量必须在 0-100 之间，当前为 {}", self.png));
+        }
+        if self.png < PNG_QUALITY_MIN {
+            return Err(format!("PNG 质量最低为 {}，当前为 {}", PNG_QUALITY_MIN, self.png));
         }
         Ok(())
     }
