@@ -1,4 +1,5 @@
 pub mod drop_zone;
+pub mod emoji_test;
 pub mod error_log;
 pub mod header;
 pub mod history;

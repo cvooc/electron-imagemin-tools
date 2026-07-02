@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use crate::views::{drop_zone, error_log, header, history, modal, progress, result_table, settings, stack, toast};
+use crate::views::{drop_zone, emoji_test, error_log, header, history, modal, progress, result_table, settings, stack, toast};
+use crate::theme;
 use imagemin_core::{Config, History, HistoryEntry, OutputMode, ThemeMode};
 
 #[derive(Debug, Clone)]
@@ -15,6 +16,7 @@ pub enum AppState {
     Settings,
     History,
     ErrorLog,
+    EmojiTest,
 }
 
 /// 压缩失败日志条目
@@ -52,6 +54,7 @@ pub enum Message {
     Settings(settings::Message),
     History(history::Message),
     ErrorLog(error_log::Message),
+    EmojiTest(emoji_test::Message),
     FilesSelected(Vec<PathBuf>),
     FileHovered(PathBuf),
     FileDropped(PathBuf),
@@ -182,6 +185,13 @@ impl Application for App {
                     _ => {
                         self.state = AppState::ErrorLog;
                     }
+                }
+                Command::none()
+            }
+            Message::Header(header::Message::OpenEmojiTest) => {
+                match self.state {
+                    AppState::EmojiTest => self.state = AppState::Idle,
+                    _ => self.state = AppState::EmojiTest,
                 }
                 Command::none()
             }
@@ -345,6 +355,10 @@ impl Application for App {
                 self.toast = Some(toast::Toast::info("日志已清空"));
                 Command::none()
             }
+            Message::EmojiTest(emoji_test::Message::Back) => {
+                self.state = AppState::Idle;
+                Command::none()
+            }
             Message::ResultTable(result_table::Message::OpenOutputDir) => {
                 if let Some(dir) = &self.output_dir {
                     open::that(dir).ok();
@@ -483,6 +497,7 @@ impl Application for App {
             AppState::Settings => settings::view(&self.config).map(Message::Settings),
             AppState::History => history::view(&self.history.entries).map(Message::History),
             AppState::ErrorLog => error_log::view(&self.logs).map(Message::ErrorLog),
+            AppState::EmojiTest => emoji_test::view().map(Message::EmojiTest),
         };
 
         let toast_element: Element<'_, Message> = match &self.toast {
@@ -502,7 +517,11 @@ impl Application for App {
                 .height(Length::Fill),
         )
         .width(Length::Fill)
-        .height(Length::Fill);
+        .height(Length::Fill)
+        .style(|theme: &iced::Theme| {
+            let is_dark = matches!(theme, iced::Theme::Dark | iced::Theme::CatppuccinMocha | iced::Theme::TokyoNight | iced::Theme::Dracula | iced::Theme::Nord);
+            theme::container_surface(is_dark)
+        });
 
         // 弹窗激活时使用 Stack 叠加在半透明蒙层之上
         if self.show_clear_modal {

@@ -1,6 +1,7 @@
-use iced::widget::{button, column, horizontal_space, row, text};
-use iced::{Element, Length};
+use iced::widget::{button, column, container, horizontal_space, progress_bar, row, text, text::Shaping};
+use iced::{Background, Color, Element, Length};
 
+use crate::theme;
 use crate::util::{format_savings, format_size};
 
 #[derive(Debug, Clone)]
@@ -24,13 +25,31 @@ pub enum Message {
     Preview(usize),
 }
 
+fn progress_bar_style(ratio: f32) -> impl Fn(&iced::Theme) -> iced::widget::progress_bar::Appearance {
+    move |_theme| progress_bar::Appearance {
+        background: Background::Color(Color::from_rgb(0.9, 0.9, 0.9)),
+        bar: Background::Color(if ratio < 0.5 { theme::SUCCESS } else { theme::ACCENT }),
+        border_radius: 3.0.into(),
+    }
+}
+
+fn row_bg_style(is_ok: bool) -> impl Fn(&iced::Theme) -> iced::widget::container::Appearance {
+    let bg = if is_ok { theme::SUCCESS_BG } else { theme::ERROR_BG };
+    move |_theme| container::Appearance {
+        background: Some(Background::Color(bg)),
+        ..Default::default()
+    }
+}
+
 pub fn view(results: &[Row], has_output_dir: bool) -> Element<'static, Message> {
     let header = row![
-        text("图片名").width(Length::FillPortion(3)),
-        text("原图大小").width(Length::FillPortion(1)),
-        text("压缩后大小").width(Length::FillPortion(1)),
-        text("节省").width(Length::FillPortion(1)),
-        text("状态").width(Length::FillPortion(1)),
+        text("图片名").shaping(Shaping::Advanced).width(Length::FillPortion(3)),
+        text("原图大小").shaping(Shaping::Advanced).width(Length::FillPortion(1)),
+        text("压缩后大小").shaping(Shaping::Advanced).width(Length::FillPortion(1)),
+        text("节省").shaping(Shaping::Advanced).width(Length::FillPortion(1)),
+        text("状态").shaping(Shaping::Advanced).width(Length::FillPortion(1)),
+        text("压缩率").shaping(Shaping::Advanced).width(Length::FillPortion(1)),
+        text("操作").shaping(Shaping::Advanced).width(Length::FillPortion(1)),
     ]
     .padding(8);
 
@@ -42,24 +61,36 @@ pub fn view(results: &[Row], has_output_dir: bool) -> Element<'static, Message> 
     let mut fail_count = 0;
 
     for (i, result) in results.iter().enumerate() {
+        let is_ok = result.status.is_ok();
+
         let status_text = match &result.status {
             Ok(()) => {
                 total_original += result.original_size;
                 total_compressed += result.compressed_size;
                 success_count += 1;
-                "成功".to_string()
+                "✅ 成功".to_string()
             }
             Err(e) => {
                 fail_count += 1;
-                format!("失败: {}", e)
+                format!("❌ 失败: {}", e)
             }
         };
 
         let savings = result.original_size as i64 - result.compressed_size as i64;
-        let savings_text = if result.status.is_ok() {
+        let savings_text = if is_ok {
             format_savings(savings)
         } else {
             "-".to_string()
+        };
+
+        let ratio_bar: Element<'static, Message> = if is_ok && result.original_size > 0 {
+            let ratio = result.compressed_size as f32 / result.original_size as f32;
+            progress_bar(0.0..=1.0, 1.0 - ratio)
+                .width(Length::Fixed(60.0))
+                .style(progress_bar_style(ratio))
+                .into()
+        } else {
+            text("-").size(12).into()
         };
 
         let can_preview = result.input_path.is_some() || result.output_path.is_some();
@@ -69,17 +100,18 @@ pub fn view(results: &[Row], has_output_dir: bool) -> Element<'static, Message> 
             text(format_size(result.original_size)).width(Length::FillPortion(1)),
             text(format_size(result.compressed_size)).width(Length::FillPortion(1)),
             text(savings_text).width(Length::FillPortion(1)),
-            text(status_text).width(Length::FillPortion(1)),
+            text(status_text).shaping(Shaping::Advanced).width(Length::FillPortion(1)),
+            ratio_bar,
         ]
         .padding(4);
 
         let row = if can_preview {
-            row.push(button(text("预览").size(12)).on_press(Message::Preview(i)))
+            row.push(button(text("🔍").shaping(Shaping::Advanced).size(12)).on_press(Message::Preview(i)))
         } else {
             row
         };
 
-        rows = rows.push(row);
+        rows = rows.push(container(row).style(row_bg_style(is_ok)).padding(2));
     }
 
     let total_savings = total_original as i64 - total_compressed as i64;

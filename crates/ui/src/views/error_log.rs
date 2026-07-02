@@ -1,4 +1,4 @@
-use iced::widget::{button, column, container, row, scrollable, text};
+use iced::widget::{button, column, container, row, scrollable, text, text::Shaping};
 use iced::{Color, Element, Length};
 
 use crate::app::LogEntry;
@@ -27,7 +27,8 @@ pub fn view(logs: &[LogEntry]) -> Element<'static, Message> {
 
     if logs.is_empty() {
         content = content.push(
-            text("暂无失败日志")
+            text("✅ 暂无失败日志")
+                .shaping(Shaping::Advanced)
                 .size(16)
                 .style(Color::from_rgb(0.5, 0.5, 0.5)),
         );

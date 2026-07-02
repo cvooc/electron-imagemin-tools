@@ -1,5 +1,7 @@
-use iced::widget::{button, column, container, row, text};
+use iced::widget::{button, column, container, horizontal_space, row, text};
 use iced::{Background, Border, Color, Element, Length};
+
+use crate::theme;
 
 /// Modal 确认对话框
 #[derive(Debug, Clone)]
@@ -19,15 +21,14 @@ fn card_style(_theme: &iced::Theme) -> container::Appearance {
             radius: 8.0.into(),
             ..Default::default()
         },
+        shadow: theme::shadow_modal(),
         ..Default::default()
     }
 }
 
 fn overlay_style(_theme: &iced::Theme) -> container::Appearance {
     container::Appearance {
-        background: Some(Background::Color(Color::from_rgba(
-            0.0, 0.0, 0.0, 0.4,
-        ))),
+        background: Some(Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.5))),
         ..Default::default()
     }
 }
@@ -41,6 +42,7 @@ pub fn view<'a, M: Clone + 'a>(modal: &Modal<M>) -> Element<'a, M> {
             button(text(&modal.cancel_label))
                 .on_press(modal.on_cancel.clone())
                 .style(iced::theme::Button::Secondary),
+            horizontal_space(),
             button(text(&modal.confirm_label))
                 .on_press(modal.on_confirm.clone())
                 .style(iced::theme::Button::Destructive),

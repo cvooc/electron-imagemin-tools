@@ -1,5 +1,5 @@
-use iced::widget::{button, column, container, row, scrollable, text};
-use iced::{Element, Length};
+use iced::widget::{button, column, container, row, scrollable, text, text::Shaping};
+use iced::{Color, Element, Length};
 use imagemin_core::HistoryEntry;
 
 use crate::util::format_size;
@@ -16,10 +16,12 @@ pub fn view(entries: &[HistoryEntry]) -> Element<'static, Message> {
     if entries.is_empty() {
         return container(
             column![
+                text("📭").shaping(Shaping::Advanced).size(48),
                 text("暂无压缩历史").size(20),
-                text("完成压缩后会自动记录在这里").size(14),
+                text("完成压缩后会自动记录在这里").size(14).style(Color::from_rgb(0.5, 0.5, 0.5)),
             ]
-            .spacing(12),
+            .spacing(12)
+            .align_items(iced::Alignment::Center),
         )
         .width(Length::Fill)
         .height(Length::Fill)

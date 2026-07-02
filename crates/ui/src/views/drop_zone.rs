@@ -1,5 +1,7 @@
-use iced::widget::{button, column, container, text};
+use iced::widget::{button, column, container, text, text::Shaping};
 use iced::{Background, Border, Color, Element, Length, Theme};
+
+use crate::theme;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -8,29 +10,44 @@ pub enum Message {
 
 fn drop_zone_style(_theme: &Theme) -> container::Appearance {
     container::Appearance {
-        background: Some(Background::Color(Color::WHITE)),
+        background: Some(Background::Color(Color::from_rgb(0.96, 0.96, 0.97))),
         border: Border {
-            color: Color::from_rgb(0.6, 0.6, 0.6),
+            color: Color::from_rgb(0.7, 0.7, 0.7),
             width: 2.0,
-            radius: 8.0.into(),
+            radius: theme::RADIUS_LARGE.into(),
         },
-        text_color: Some(Color::from_rgb(0.3, 0.3, 0.3)),
+        text_color: Some(Color::from_rgb(0.4, 0.4, 0.4)),
+        ..Default::default()
+    }
+}
+
+fn drop_zone_hover_style(_theme: &Theme) -> container::Appearance {
+    container::Appearance {
+        background: Some(Background::Color(theme::ACCENT_LIGHT)),
+        border: Border {
+            color: theme::ACCENT,
+            width: 2.5,
+            radius: theme::RADIUS_LARGE.into(),
+        },
+        text_color: Some(theme::ACCENT_HOVER),
         ..Default::default()
     }
 }
 
 pub fn view(file_count: usize) -> Element<'static, Message> {
     let hint = if file_count > 0 {
-        format!("已选择 {} 个文件", file_count)
+        format!("📋 已选择 {} 个文件，点击开始压缩", file_count)
     } else {
-        String::from("点击选择图片 / 拖放图片或文件夹")
+        String::from("📂 点击选择图片 / 拖放图片或文件夹")
     };
 
     let content = column![
-        text(hint).size(20),
-        text("支持格式：JPG/PNG/GIF/SVG/WebP").size(14),
+        text("📂").shaping(Shaping::Advanced).size(48),
+        text(hint).shaping(Shaping::Advanced).size(16),
+        text("支持格式：JPG / PNG / GIF / SVG / WebP / AVIF").shaping(Shaping::Advanced).size(13),
     ]
-    .spacing(12);
+    .spacing(10)
+    .align_items(iced::Alignment::Center);
 
     let inner = container(content)
         .width(Length::Fill)
@@ -49,17 +66,19 @@ pub fn view(file_count: usize) -> Element<'static, Message> {
 
 pub fn view_hovered() -> Element<'static, Message> {
     let content = column![
-        text("释放鼠标以添加图片").size(20),
-        text("支持格式：JPG/PNG/GIF/SVG/WebP").size(14),
+        text("📥").shaping(Shaping::Advanced).size(48),
+        text("释放鼠标以添加图片").shaping(Shaping::Advanced).size(16),
+        text("支持格式：JPG / PNG / GIF / SVG / WebP / AVIF").shaping(Shaping::Advanced).size(13),
     ]
-    .spacing(12);
+    .spacing(10)
+    .align_items(iced::Alignment::Center);
 
     let inner = container(content)
         .width(Length::Fill)
         .height(Length::Fill)
         .center_x()
         .center_y()
-        .style(drop_zone_style);
+        .style(drop_zone_hover_style);
 
     button(inner)
         .width(Length::Fill)
